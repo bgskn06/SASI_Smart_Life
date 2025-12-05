@@ -1,0 +1,2 @@
+dependencies {
+    implementation 'com.thingclips.smart:thingsmart-lock-sdk:6.4.0'

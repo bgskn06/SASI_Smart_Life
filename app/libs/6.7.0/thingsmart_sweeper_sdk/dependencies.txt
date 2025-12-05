@@ -1,0 +1,3 @@
+dependencies{
+implementation 'com.thingclips.smart:sweeper:6.0.3'
+}

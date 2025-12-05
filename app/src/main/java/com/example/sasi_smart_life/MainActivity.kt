@@ -1,0 +1,86 @@
+package com.example.sasi_smart_life
+
+import android.Manifest
+import android.content.pm.ActivityInfo
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sasi_smart_life.view.theme.SasiTheme
+import com.example.sasi_smart_life.viewModel.MainViewModel
+import com.example.sasi_smart_life.viewModel.MainViewModelFactory
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+
+@OptIn(ExperimentalPermissionsApi::class)
+class MainActivity : ComponentActivity() {
+
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        enableEdgeToEdge()
+        setContent {
+            val mainViewModel: MainViewModel = viewModel(
+                factory = MainViewModelFactory()
+            )
+            SasiApp(mainViewModel)
+        }
+
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+    }
+}
+
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun SasiApp(viewModel: MainViewModel) {
+    SasiTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            val locationPermissionState = rememberPermissionState(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+
+            if (locationPermissionState.status.isGranted) {
+                AppNavigation(viewModel)
+            } else {
+                PermissionScreen(onRequestPermission = { locationPermissionState.launchPermissionRequest() })
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionScreen(onRequestPermission: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Izin Lokasi diperlukan untuk fungsionalitas aplikasi.")
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onRequestPermission) {
+            Text("Berikan Izin")
+        }
+    }
+}
