@@ -1,7 +1,10 @@
 package com.example.sasi_smart_life.data.repository
 
 import android.util.Log
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
 class FBRoomRepository {
 
@@ -16,19 +19,40 @@ class FBRoomRepository {
         imageUrl: String = "",
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val data = mapOf(
-            "homeId" to homeId,
-            "name" to name,
-            "image" to imageUrl,
-            "isMap" to false,
-            "x" to 0f,
-            "y" to 0f
-        )
+        db.orderByChild("homeId").equalTo(homeId).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                var nameExists = false
+                for (roomSnapshot in snapshot.children) {
+                    val existingName = roomSnapshot.child("name").getValue(String::class.java)
+                    if (existingName?.equals(name, ignoreCase = true) == true) {
+                        nameExists = true
+                        break
+                    }
+                }
 
-        db.child(roomId)
-            .setValue(data)
-            .addOnSuccessListener { onComplete(true, null) }
-            .addOnFailureListener { e -> onComplete(false, e.message) }
+                if (nameExists) {
+                    onComplete(false, "A room with the name '$name' already exists.")
+                } else {
+                    val data = mapOf(
+                        "homeId" to homeId,
+                        "name" to name,
+                        "image" to imageUrl,
+                        "isMap" to false,
+                        "x" to 0f,
+                        "y" to 0f
+                    )
+
+                    db.child(roomId)
+                        .setValue(data)
+                        .addOnSuccessListener { onComplete(true, null) }
+                        .addOnFailureListener { e -> onComplete(false, e.message) }
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                onComplete(false, error.message)
+            }
+        })
     }
 
     fun updateRoomPosition(roomId: String, x: Float, y: Float, onComplete: (Boolean, String?) -> Unit) {

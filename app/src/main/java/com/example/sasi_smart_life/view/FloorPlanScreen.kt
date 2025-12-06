@@ -239,6 +239,9 @@ private fun DraggableNodeIcon(
                     .size(if (category?.name == "Wooden Lamp") 72.dp
                     else if(category?.name == "Leather Lamp") 52.dp
                     else if(category?.name == "Stop Kontak") 9.dp
+                    else if(category?.name == "Lampu KMI") 148.dp
+                    else if(category?.name == "Street Lamp") 108.dp
+                    else if(category?.name == "Spot Lamp") 24.dp
                     else 36.dp)
             )
             if (isBeingDragged) {

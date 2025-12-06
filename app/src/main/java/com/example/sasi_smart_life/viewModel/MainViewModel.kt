@@ -190,12 +190,19 @@ class MainViewModel(
         }
     }
 
-    fun createRoom(homeId: String, name: String, img: String = "") {
+    fun createRoom(
+        homeId: String,
+        name: String,
+        img: String = "",
+        onResult: (success: Boolean, error: String?) -> Unit
+    ) {
         val homeName = _uiState.value.selectedHomeId?.name ?: "default"
         val roomId = "room_${homeName}_${System.currentTimeMillis()}"
         roomRepo.createRoom(roomId, homeId, name, img) { success, error ->
-            if (success) loadRooms(homeId)
-            else _uiState.value = _uiState.value.copy(error = error)
+            if (success) {
+                loadRooms(homeId)
+            }
+            onResult(success, error)
         }
     }
 

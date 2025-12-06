@@ -1,4 +1,3 @@
-
 package com.example.sasi_smart_life.view
 
 import androidx.compose.foundation.BorderStroke
@@ -77,20 +76,20 @@ fun SettingScreen(
         })
     }
 
-    if (showAddSceneDialog) {
-        AddSmartSceneDialog(
-            devices = appState.devices,
-            rooms = appState.rooms,
-            onDismissRequest = { showAddSceneDialog = false },
-            onSave = { name, ifData, thenActions ->
-                val homeId = appState.selectedHomeId?.homeId
-                if (homeId != null) {
-                    viewModel.addScene(homeId, name, ifData, thenActions)
-                }
-                showAddSceneDialog = false
-            }
-        )
-    }
+//    if (showAddSceneDialog) {
+//        AddSmartSceneDialog(
+//            devices = appState.devices,
+//            rooms = appState.rooms,
+//            onDismissRequest = { showAddSceneDialog = false },
+//            onSave = { name, ifData, thenActions ->
+//                val homeId = appState.selectedHomeId?.homeId
+//                if (homeId != null) {
+//                    viewModel.addScene(homeId, name, ifData, thenActions)
+//                }
+//                showAddSceneDialog = false
+//            }
+//        )
+//    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier
@@ -195,6 +194,7 @@ fun RoomManagement(
 ) {
     var showAddRoomDialog by remember { mutableStateOf(false) }
     val currentHomeId = viewModel.uiState.collectAsState().value.selectedHomeId?.homeId
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     if (showAddRoomDialog) {
         AddRoomDialog(
@@ -204,10 +204,16 @@ fun RoomManagement(
                     viewModel.createRoom(
                         homeId = currentHomeId,
                         name = roomName
-                    )
+                    ) { success, error ->
+                        if (success) {
+                            showAddRoomDialog = false
+                        } else {
+                            errorMessage = error
+                        }
+                    }
                 }
-                showAddRoomDialog = false
-            }
+            },
+            errorMessage = errorMessage
         )
     }
 
@@ -230,7 +236,7 @@ fun RoomManagement(
             )
         }
         item {
-            AddRoomCard(onClick = { showAddRoomDialog = true })
+            AddRoomCard(onClick = { showAddRoomDialog = true }) // Show dialog here
         }
     }
 }
@@ -294,7 +300,7 @@ fun RoomCard(
                             tint = sasiColor.purple500
                         )
                     }
-                    Box {
+                    Box { // This Box is a container for the icon and the popup
                         Icon(
                             imageVector = Icons.Default.MoreHoriz,
                             contentDescription = "Options For ${room.name}",
@@ -368,8 +374,8 @@ fun AddRoomCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
 fun AddRoomDialog(
     onDismissRequest: () -> Unit,
     onSave: (String) -> Unit,
+    errorMessage: String?
 ) {
-
     var name by remember { mutableStateOf("") }
 
     Dialog(
@@ -379,7 +385,7 @@ fun AddRoomDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.7f)
-                .fillMaxHeight(0.45f),
+                .fillMaxHeight(0.35f),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
@@ -389,53 +395,250 @@ fun AddRoomDialog(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Add Room",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Enter Room Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = sasiColor.purple500,
-                        unfocusedBorderColor = sasiColor.black300,
-                        cursorColor = sasiColor.purple500,
-                        focusedLabelColor = sasiColor.black300,
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Add Room",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
-                )
-                Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Room Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = errorMessage != null,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = sasiColor.purple500,
+                            unfocusedBorderColor = sasiColor.black300,
+                            cursorColor = sasiColor.purple500,
+                            focusedLabelColor = sasiColor.black300,
+                        )
+                    )
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.End
                 ) {
                     Button(
                         onClick = onDismissRequest,
-                        modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red50)
                     ) {
                         Text("Cancel", color = sasiColor.red500)
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = {
-                            if (name.isNotBlank()) onSave(name)
-                            if (name.isNotBlank()) onDismissRequest()
-                        },
-                        modifier = Modifier.weight(1f),
+                        onClick = { onSave(name) },
                         colors = ButtonDefaults.buttonColors(containerColor = sasiColor.blue500)
                     ) {
-                        Text("Save", color = Color.White)
+                        Text("Save")
                     }
                 }
             }
         }
     }
 }
+
+
+
+
+// SMART SCENE
+//@Composable
+//fun SmartScene(
+//    viewModel: MainViewModel,
+//    sceneList: List<SmartScene>,
+//    onAddSceneClick: () -> Unit
+//) {
+//    LazyVerticalGrid(
+//        columns = GridCells.Fixed(4),
+//        verticalArrangement = Arrangement.spacedBy(8.dp),
+//        horizontalArrangement = Arrangement.spacedBy(8.dp),
+//    ) {
+//        items(sceneList) { scene ->
+//            SmartSceneCard(
+//                scene = scene,
+//                onClick = {
+//                    viewModel.executeScene(scene)
+//                }
+//            )
+//        }
+//        item {
+//            AddSceneCard(onClick = onAddSceneClick)
+//        }
+//    }
+//}
+//
+
+@Composable
+fun AddSceneCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = sasiColor.blue50),
+        border = BorderStroke(2.dp, sasiColor.blue100),
+        modifier = modifier
+            .height(120.dp)
+            .fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.AddCircle,
+                contentDescription = "Add Smart Scene",
+                tint = sasiColor.blue500,
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Add Smart Scene",
+                color = sasiColor.blue500,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun SmartSceneCard(scene: SmartScene, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .height(120.dp)
+            .fillMaxWidth(),
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = scene.name, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+//@Composable
+//fun AddSmartSceneDialog(
+//    devices: List<Device>,
+//    rooms: List<Room>,
+//    onDismissRequest: () -> Unit,
+//    onSave: (String, Map<String, Any>, List<Map<String, Any>>) -> Unit
+//) {
+//    var sceneName by remember { mutableStateOf("") }
+//    var ifCondition by remember { mutableStateOf<Map<String, Any>>(emptyMap()) }
+//    var thenActions by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+//
+//    Dialog(onDismissRequest = onDismissRequest) {
+//        Card(modifier = Modifier
+//            .fillMaxWidth()
+//            .padding(16.dp)) {
+//            Column(modifier = Modifier
+//                .padding(16.dp)
+//                .fillMaxWidth()) {
+//                Text("Add Smart Scene", style = MaterialTheme.typography.headlineSmall)
+//                Spacer(modifier = Modifier.height(16.dp))
+//                OutlinedTextField(
+//                    value = sceneName,
+//                    onValueChange = { sceneName = it },
+//                    label = { Text("Scene Name") },
+//                    modifier = Modifier.fillMaxWidth()
+//                )
+//                Spacer(modifier = Modifier.height(16.dp))
+//
+//                // "If" condition setup (simplified)
+//                Text("If:", fontWeight = FontWeight.Bold)
+//
+//                // Example: Time-based condition
+//                var selectedHour by remember { mutableStateOf(12) }
+//                var selectedMinute by remember { mutableStateOf(0) }
+//
+//                Row(verticalAlignment = Alignment.CenterVertically) {
+//                    Text("Time is: ")
+//                    // Simple time picker placeholder
+//                    Button(onClick = { /* Implement time picker */ }) {
+//                        Text("$selectedHour:$selectedMinute")
+//                    }
+//                    ifCondition = mapOf("type" to "time", "hour" to selectedHour, "minute" to selectedMinute)
+//                }
+//
+//                Spacer(modifier = Modifier.height(16.dp))
+//
+//                // "Then" action setup
+//                Text("Then:", fontWeight = FontWeight.Bold)
+//
+//                // Example: Control a device
+//                var selectedDevice by remember { mutableStateOf<Device?>(null) }
+//                var selectedAction by remember { mutableStateOf(false) }
+//                var showDeviceSelector by remember { mutableStateOf(false) }
+//
+//                Row(verticalAlignment = Alignment.CenterVertically) {
+//                    Button(onClick = { showDeviceSelector = true }) {
+//                        Text(selectedDevice?.name ?: "Select Device")
+//                    }
+//                    if (showDeviceSelector) {
+//                        DeviceSelector(devices, onDeviceSelected = {
+//                            selectedDevice = it
+//                            showDeviceSelector = false
+//                        }, onDismiss = { showDeviceSelector = false })
+//                    }
+//                    Spacer(modifier = Modifier.width(8.dp))
+//                    Text("Turn")
+//                    Spacer(modifier = Modifier.width(8.dp))
+//                    Switch(checked = selectedAction, onCheckedChange = { selectedAction = it })
+//                    Text(if (selectedAction) "On" else "Off")
+//                }
+//
+//                Button(onClick = {
+//                    selectedDevice?.let {
+//                        val newAction = mapOf("devId" to it.devId, "status" to selectedAction)
+//                        thenActions = thenActions + newAction
+//                        selectedDevice = null // Reset for next action
+//                    }
+//                }) {
+//                    Text("Add Action")
+//                }
+//
+//                // Display added actions
+//                thenActions.forEach { action ->
+//                    val deviceName = devices.find { it.devId == action["devId"] }?.name
+//                    val statusText = if (action["status"] == true) "On" else "Off"
+//                    Text("Turn $deviceName $statusText")
+//                }
+//
+//                Spacer(modifier = Modifier.height(32.dp))
+//                Row(
+//                    modifier = Modifier.fillMaxWidth(),
+//                    horizontalArrangement = Arrangement.End
+//                ) {
+//                    TextButton(onClick = onDismissRequest) {
+//                        Text("Cancel")
+//                    }
+//                    Button(onClick = {
+//                        if (sceneName.isNotBlank() && ifCondition.isNotEmpty() && thenActions.isNotEmpty()) {
+//                            onSave(sceneName, ifCondition, thenActions)
+//                        }
+//                    }) {
+//                        Text("Save")
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}
 
 @Composable
 fun RoomOption(
@@ -443,57 +646,105 @@ fun RoomOption(
     onDismissRequest: () -> Unit,
     onToggleFloorPlan: () -> Unit
 ) {
-    Popup(onDismissRequest = onDismissRequest) {
-        Card (
-            colors = CardDefaults.cardColors(containerColor = sasiColor.grey50),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
+    // The popup will be positioned relative to this Box
+    Box {
+        Popup(
+            alignment = Alignment.TopStart,
+            onDismissRequest = onDismissRequest,
+        ) {
+            // The content of the popup
+            Card(
+                modifier = Modifier
+                    .background(sasiColor.grey50, RoundedCornerShape(8.dp))
+                    .border(1.dp, sasiColor.grey600, RoundedCornerShape(8.dp)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-            Column (modifier = Modifier
-                .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row (verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.clickable(onClick = {})
-                ) {
-                    Icon(imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit Room",
-                        modifier = Modifier
-                            .size(18.dp),
-                        tint = sasiColor.yellow500,
-                    )
-                    Text("Edit", style = MaterialTheme.typography.labelMedium)
-                }
-                Row (verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.clickable(onClick = {})
-                ) {
-                    Icon(imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Room",
-                        modifier = Modifier
-                            .size(18.dp),
-                        tint = sasiColor.red500,
-                    )
-                    Text("Delete", style = MaterialTheme.typography.labelMedium)
-                }
-                Row (verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.clickable(onClick = onToggleFloorPlan)
-                ) {
-                    Icon(imageVector = Icons.Default.AddCircle,
-                        contentDescription = "Add Room",
-                        modifier = Modifier
-                            .size(18.dp),
-                        tint = sasiColor.blue500,
-                    )
-                    Text(
-                        text = if (room.isMap) "Floor Plan Enabled" else "Floor Plan Disabled",
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text("Options", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable(onClick = { /* Handle Edit */ })
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Room", tint = sasiColor.black500)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Room", color = sasiColor.black500)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { showDeleteConfirmation = true }
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete Room", tint = sasiColor.red500)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Delete Room", color = sasiColor.red500)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable(onClick = onToggleFloorPlan)
+                    ) {
+                        Icon(
+                            if (room.isMap) Icons.Default.AddCircle else Icons.Default.AddCircle,
+                            contentDescription = if (room.isMap) "Hide from Floor Plan" else "Show on Floor Plan",
+                            tint = if (room.isMap) sasiColor.red500 else sasiColor.green500)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (room.isMap) "Hide from Floor Plan" else "Show on Floor Plan",
+                            color = if (room.isMap) sasiColor.red500 else sasiColor.green500
+                        )
+                    }
                 }
             }
         }
     }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Room") },
+            text = { Text("Are you sure you want to delete this room? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Handle delete action here
+                        showDeleteConfirmation = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red500)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
-// END ROOM MANAGEMENT
+
+
+@Composable
+fun DeviceSelector(devices: List<Device>, onDeviceSelected: (Device) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select a Device") },
+        text = {
+            LazyVerticalGrid(columns = GridCells.Fixed(3)) {
+                items(devices) { device ->
+                    Card(onClick = { onDeviceSelected(device) }, modifier = Modifier.padding(4.dp)) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(device.name)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { }
+    )
+}
+
+
+
