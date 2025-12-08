@@ -69,18 +69,22 @@ import coil.compose.AsyncImage
 import com.example.sasi_smart_life.data.models.DeviceCategory
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import com.example.sasi_smart_life.viewModel.PairingStep
-import com.example.sasi_smart_life.viewModel.TuyaPairingViewModel
+import com.example.sasi_smart_life.viewModel.TuyaViewModel
 import com.example.sasi_smart_life.view.theme.sasiColor
 
 @Composable
 fun PairingScreen(
     mainViewModel: MainViewModel,
-    pairingViewModel: TuyaPairingViewModel,
+    tuyaViewModel: TuyaViewModel,
     onBack: () -> Unit,
     roomId: String? // Pass roomId for custom device addition
 ) {
     val context = LocalContext.current
-    val pairingState by pairingViewModel.uiState.collectAsState()
+    val pairingState by tuyaViewModel.pairingState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        tuyaViewModel.resetState()
+    }
 
     LaunchedEffect(pairingState.error) {
         pairingState.error?.let {
@@ -143,7 +147,7 @@ fun PairingScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     IconButton(onClick = {
-                        pairingViewModel.stopPairing()
+                        tuyaViewModel.stopPairing()
                         onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -185,7 +189,7 @@ fun PairingScreen(
                         color = if (selectedTab == "Tuya") sasiColor.blue50 else sasiColor.black300,
                         modifier = Modifier
                             .clip(buttonShape)
-                            //.clickable { selectedTab = "Tuya" }
+                            .clickable { selectedTab = "Tuya" }
                             .background(if (selectedTab == "Tuya") sasiColor.blue500 else Color.Transparent)
                             .border(
                                 BorderStroke(
@@ -203,7 +207,7 @@ fun PairingScreen(
                 if (selectedTab == "Tuya") {
                     PairingTuya(
                         ssid = ssid, 
-                        pairingViewModel = pairingViewModel, 
+                        tuyaViewModel = tuyaViewModel,
                         mainViewModel = mainViewModel,
                         onPairingSuccess = onBack,
                         roomId = roomId // Close the dialog on success
@@ -305,7 +309,6 @@ fun AddDeviceCustom(
             label = { Text("Room") },
             modifier = Modifier.fillMaxWidth(),
             colors = colorTextfield
-
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -334,7 +337,7 @@ fun AddDeviceCustom(
 @Composable
 fun PairingTuya(
     ssid: String, 
-    pairingViewModel: TuyaPairingViewModel,
+    tuyaViewModel: TuyaViewModel,
     mainViewModel: MainViewModel,
     onPairingSuccess: () -> Unit,
     roomId: String?
@@ -342,8 +345,15 @@ fun PairingTuya(
     val context = LocalContext.current
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    val pairingState by pairingViewModel.uiState.collectAsState()
+    val pairingState by tuyaViewModel.pairingState.collectAsState()
     val appState by mainViewModel.uiState.collectAsState()
+    val colorTextfield = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = sasiColor.purple500,
+        unfocusedBorderColor = sasiColor.black300,
+        cursorColor = sasiColor.purple500,
+        focusedLabelColor = sasiColor.black300,
+    )
+
 
     LaunchedEffect(pairingState.step) {
         if (pairingState.step == PairingStep.SUCCESS) {
@@ -406,20 +416,21 @@ fun PairingTuya(
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(image, "toggle password visibility")
                 }
-            }
+            },
+            colors = colorTextfield
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = { 
-                val homeId = appState.selectedHomeId?.homeId?.toLongOrNull()
+                val homeId = appState.selectedHomeId?.tuyaHomeId
                 if (homeId == null) {
                     Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
 
-                pairingViewModel.startPairing(context, homeId, ssid, password) { deviceBean ->
+                tuyaViewModel.startPairing(context, homeId, ssid, password) { deviceBean ->
                     // Convert DeviceBean to your custom Device model and save
                     mainViewModel.addDevice(
                         devId = deviceBean.devId,
@@ -431,10 +442,11 @@ fun PairingTuya(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = ssid.isNotBlank() && password.isNotBlank() && pairingState.step == PairingStep.IDLE
+            enabled = ssid.isNotBlank() && password.isNotBlank() && pairingState.step == PairingStep.IDLE,
+            colors = ButtonDefaults.buttonColors(sasiColor.blue500)
         ) {
             if (pairingState.step == PairingStep.IDLE) {
-                Text("Search for Devices")
+                Text("Search for Devices", color = sasiColor.blue50)
             } else {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
             }

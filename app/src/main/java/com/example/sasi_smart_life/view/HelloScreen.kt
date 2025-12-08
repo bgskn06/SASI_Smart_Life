@@ -13,12 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.sasi_smart_life.R
-import com.example.sasi_smart_life.viewModel.TuyaViewModel
 import com.example.sasi_smart_life.view.theme.sasiColor
+import com.example.sasi_smart_life.viewModel.MainViewModel
 
 
 @Composable
-fun HelloScreen(viewModel: TuyaViewModel) {
+fun HelloScreen(viewModel: MainViewModel) {
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {

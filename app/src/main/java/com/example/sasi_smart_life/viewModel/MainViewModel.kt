@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import com.example.sasi_smart_life.data.models.*
 import com.example.sasi_smart_life.data.repository.*
 import com.google.firebase.auth.FirebaseAuth
+import com.thingclips.smart.home.sdk.ThingHomeSdk
+import com.thingclips.smart.home.sdk.bean.HomeBean
+import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -15,6 +18,7 @@ class MainViewModel(
     private val deviceRepo: FBDeviceRepository,
     private val sceneRepo: FBSceneRepository,
     private val categoryRepo: FBCategoryRepository,
+    private val tuyaAuthRepo: TuyaAuthRepository,
     private val scheduleRepo: FBScheduleRepository
 ) : ViewModel() {
 
@@ -31,19 +35,32 @@ class MainViewModel(
 
     init {
         auth.addAuthStateListener { firebaseAuth ->
-
             val user = firebaseAuth.currentUser
 
             if (user != null) {
+                // FIREBASE LOGIN SUKSES
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
-                    error = null,
-                    info = "Logged in as ${user.email}"
+                    info = "Logged in Firebase as ${user.email}. Connecting to Tuya..."
                 )
 
-                loadAllData()
+                // --- SHADOW LOGIN KE TUYA ---
+                val uid = user.uid
+                tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
+                    if (success) {
+                        Log.d(tag, "Tuya Login Success!")
+                        // Setelah sukses login Tuya, baru load data
+                        loadAllData()
+                    } else {
+                        Log.e(tag, "Tuya Login Failed: $error")
+                        _uiState.value = _uiState.value.copy(error = "Tuya Error: $error")
+                    }
+                }
+                // -----------------------------
 
             } else {
+                // LOGOUT
+                tuyaAuthRepo.logout() // Logout juga dari Tuya
                 _uiState.value = AppState(isLoggedIn = false)
             }
         }
@@ -113,7 +130,8 @@ class MainViewModel(
                     homeId = m["homeId"] as String,
                     name = m["name"] as? String ?: "",
                     ownerUid = m["ownerUid"] as? String ?: "",
-                    imageUrl = m["image"] as? String ?: ""
+                    imageUrl = m["image"] as? String ?: "",
+                    tuyaHomeId = (m["tuyaHomeId"] as? Number)?.toLong() ?: 0L
                 )
             }
 
@@ -129,12 +147,58 @@ class MainViewModel(
                 if (needsSelection) {
                     loadHomeChildData(homes.first().homeId)
                 }
+                syncExistingHomesWithTuya(homes)
             } else {
                 _uiState.value = _uiState.value.copy(error = "No homes found for this user.")
             }
         }
     }
 
+    private fun syncExistingHomesWithTuya(homes: List<Home>) {
+        val uid = auth.currentUser?.uid ?: return
+
+        homes.forEach { home ->
+            // Cek apakah rumah ini belum punya ID Tuya (masih 0)
+            if (home.tuyaHomeId == 0L) {
+                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
+
+                // --- LANGSUNG PANGGIL SDK TUYA DI SINI ---
+                ThingHomeSdk.getHomeManagerInstance().createHome(
+                    home.name,
+                    0.0, // lon default
+                    0.0, // lat default
+                    home.name, // geoName
+                    listOf("Default Room"), // Tuya wajib minimal 1 ruangan
+                    object : IThingHomeResultCallback {
+                        override fun onSuccess(bean: HomeBean?) {
+                            val newTuyaId = bean?.homeId
+                            if (newTuyaId != null) {
+                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
+
+                                // Update ke Firebase menggunakan Repo Home yang lama
+                                homeRepo.updateTuyaHomeId(home.homeId, newTuyaId) { success ->
+                                    if (success) {
+                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
+                                        // Refresh data UI agar ID baru termuat
+                                        loadHomes(uid)
+                                    }
+                                }
+                            }
+                        }
+
+                        override fun onError(errorCode: String?, errorMsg: String?) {
+                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    // Helper simple untuk list ruangan (bisa dikosongkan jika repot)
+    private fun listRoomNames(homeId: String): List<String> {
+        return listOf("Default Room") // Tuya butuh minimal 1 ruangan saat create
+    }
 
     private fun loadHomeChildData(homeId: String) {
         loadRooms(homeId)

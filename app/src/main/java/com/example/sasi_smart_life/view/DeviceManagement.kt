@@ -63,8 +63,8 @@ import com.example.sasi_smart_life.R
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceCategory
 import com.example.sasi_smart_life.viewModel.MainViewModel
-import com.example.sasi_smart_life.viewModel.TuyaPairingViewModel
 import com.example.sasi_smart_life.view.theme.sasiColor
+import com.example.sasi_smart_life.viewModel.TuyaViewModel
 
 @Composable
 fun DeviceManagementScreen(
@@ -142,10 +142,10 @@ fun DeviceManagementScreen(
         }
     }
     if (isPairing) {
-        val pairingViewModel: TuyaPairingViewModel = viewModel()
+        val tuyaViewModel: TuyaViewModel = viewModel()
         PairingScreen(
             mainViewModel = viewModel,
-            pairingViewModel = pairingViewModel,
+            tuyaViewModel = tuyaViewModel,
             onBack = { isPairing = false },
             roomId = roomId
         )

@@ -7,5 +7,6 @@ data class Home(
     val homeId: String = "",
     val name: String = "",
     val ownerUid: String = "",
-    val imageUrl: String = ""
+    val imageUrl: String = "",
+    val tuyaHomeId: Long = 0L
 )

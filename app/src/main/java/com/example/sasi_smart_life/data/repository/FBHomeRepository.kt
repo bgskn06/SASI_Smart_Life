@@ -59,4 +59,16 @@ class FBHomeRepository {
             }
         // ================== END DIAGNOSTIC ==================
     }
+
+    fun updateTuyaHomeId(homeId: String, tuyaHomeId: Long, onComplete: (Boolean) -> Unit) {
+        db.child(homeId).child("tuyaHomeId").setValue(tuyaHomeId)
+            .addOnSuccessListener {
+                Log.d("FBHomeRepo", "Success update tuyaId for $homeId")
+                onComplete(true)
+            }
+            .addOnFailureListener {
+                Log.e("FBHomeRepo", "Failed update tuyaId: ${it.message}")
+                onComplete(false)
+            }
+    }
 }
