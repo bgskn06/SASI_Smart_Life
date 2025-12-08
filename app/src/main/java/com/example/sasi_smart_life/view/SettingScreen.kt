@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.rounded.MeetingRoom
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -232,7 +233,8 @@ fun RoomManagement(
                 },
                 onToggleFloorPlan = { roomId, isMap ->
                     viewModel.updateRoomIsMap(roomId, isMap)
-                }
+                },
+                viewModel = viewModel
             )
         }
         item {
@@ -243,6 +245,7 @@ fun RoomManagement(
 
 @Composable
 fun RoomCard(
+    viewModel : MainViewModel,
     room: Room,
     deviceCount: Int,
     onRoomClick: () -> Unit,
@@ -310,6 +313,7 @@ fun RoomCard(
                         if (showOptions) {
                             RoomOption(
                                 room = room,
+                                viewModel = viewModel ,
                                 onDismissRequest = { showOptions = false },
                                 onToggleFloorPlan = { onToggleFloorPlan(room.roomId, !room.isMap) }
                             )
@@ -643,6 +647,7 @@ fun SmartSceneCard(scene: SmartScene, onClick: () -> Unit) {
 @Composable
 fun RoomOption(
     room: Room,
+    viewModel: MainViewModel,
     onDismissRequest: () -> Unit,
     onToggleFloorPlan: () -> Unit
 ) {
@@ -654,22 +659,20 @@ fun RoomOption(
             alignment = Alignment.TopStart,
             onDismissRequest = onDismissRequest,
         ) {
-            // The content of the popup
             Card(
-                modifier = Modifier
-                    .background(sasiColor.grey50, RoundedCornerShape(8.dp))
-                    .border(1.dp, sasiColor.grey600, RoundedCornerShape(8.dp)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = sasiColor.grey50
+                )
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    Text("Options", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable(onClick = { /* Handle Edit */ })
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Room", tint = sasiColor.black500)
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Room", tint = sasiColor.yellow500)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Edit Room", color = sasiColor.black500)
+                        Text("Edit Room",style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
@@ -678,7 +681,7 @@ fun RoomOption(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete Room", tint = sasiColor.red500)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Delete Room", color = sasiColor.red500)
+                        Text("Delete Room", style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
@@ -686,13 +689,13 @@ fun RoomOption(
                         modifier = Modifier.clickable(onClick = onToggleFloorPlan)
                     ) {
                         Icon(
-                            if (room.isMap) Icons.Default.AddCircle else Icons.Default.AddCircle,
+                            if (room.isMap) Icons.Default.AddCircle else Icons.Default.RemoveCircle,
                             contentDescription = if (room.isMap) "Hide from Floor Plan" else "Show on Floor Plan",
                             tint = if (room.isMap) sasiColor.red500 else sasiColor.green500)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             if (room.isMap) "Hide from Floor Plan" else "Show on Floor Plan",
-                            color = if (room.isMap) sasiColor.red500 else sasiColor.green500
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
@@ -702,13 +705,14 @@ fun RoomOption(
 
     if (showDeleteConfirmation) {
         AlertDialog(
+            containerColor = sasiColor.grey50,
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("Delete Room") },
             text = { Text("Are you sure you want to delete this room? This action cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
-                        // Handle delete action here
+                        viewModel.deleteRoom(room.roomId)
                         showDeleteConfirmation = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red500)
@@ -717,8 +721,11 @@ fun RoomOption(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Cancel")
+                Button(
+                    onClick = { showDeleteConfirmation = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red50)
+                ) {
+                    Text("Cancel", color = sasiColor.red500)
                 }
             }
         )

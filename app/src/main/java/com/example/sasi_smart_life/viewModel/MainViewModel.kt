@@ -231,6 +231,28 @@ class MainViewModel(
         }
     }
 
+    fun deleteRoom(roomId: String) {
+        val currentHomeId = _uiState.value.selectedHomeId?.homeId ?: return
+
+        // Panggil Repository
+        roomRepo.deleteRoom(roomId) { success, message ->
+            if (success) {
+                // 1. Jika sukses, reload daftar ruangan agar UI update
+                loadRooms(currentHomeId)
+
+                // 2. Beri notifikasi sukses ke UI State
+                _uiState.value = _uiState.value.copy(
+                    info = "Ruangan berhasil dihapus",
+                    error = null
+                )
+            } else {
+                // 3. Jika gagal (misal masih ada device), tampilkan error dari repo
+                _uiState.value = _uiState.value.copy(
+                    error = message ?: "Gagal menghapus ruangan"
+                )
+            }
+        }
+    }
 
     // ----------------------------------------------------
     // DEVICES

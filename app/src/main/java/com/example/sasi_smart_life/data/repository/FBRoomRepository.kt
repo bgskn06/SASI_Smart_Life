@@ -73,40 +73,73 @@ class FBRoomRepository {
     }
 
     fun getRooms(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {
-        // ================== DIAGNOSTIC CODE ==================
-        // Mengambil seluruh node /rooms untuk debugging
-        db.get()
-            .addOnSuccessListener { snapshot ->
-                Log.d("ROOM_SASI", "Snapshot received. Exists: ${snapshot.exists()}. Children count: ${snapshot.childrenCount}")
+        db.orderByChild("homeId").equalTo(homeId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (!snapshot.exists()) {
+                        onComplete(emptyList())
+                        return
+                    }
 
-                if (!snapshot.exists()) {
+                    val roomList = snapshot.children.mapNotNull { childSnapshot ->
+                        val roomData = childSnapshot.value as? MutableMap<String, Any>
+                        // Pastikan ID masuk ke map agar bisa dipakai untuk update/delete
+                        roomData?.set("roomId", childSnapshot.key ?: "")
+                        roomData
+                    }
+                    Log.d("ROOM_SASI", "Rooms fetched: ${roomList.size}")
+                    onComplete(roomList)
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e("ROOM_SASI", "Error fetching rooms: ${error.message}")
                     onComplete(emptyList())
-                    return@addOnSuccessListener
+                }
+            })
+    }
+
+    fun deleteRoom(roomId: String, onComplete: (Boolean, String?) -> Unit) {
+        if (roomId.isBlank()) {
+            onComplete(false, "Invalid Room ID")
+            return
+        }
+
+        // 1. Buat referensi ke node "device"
+        // Karena variabel 'db' kamu saat ini mengarah ke "/rooms",
+        // kita perlu mengakses root database lalu ke child "device".
+        val devicesRef = db.database.reference.child("device")
+
+        // 2. Cek apakah ada device yang memiliki roomId ini
+        devicesRef.orderByChild("roomId").equalTo(roomId)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    // Jika snapshot.exists() dan childrenCount > 0, berarti ada device di ruangan ini
+                    if (snapshot.exists() && snapshot.childrenCount > 0) {
+//                        val count = snapshot.childrenCount
+//                        val message = "Gagal menghapus. Masih ada $count perangkat yang terhubung ke ruangan ini. Pindahkan atau hapus perangkat terlebih dahulu."
+//                        onComplete(false, message)
+                        Log.d("ROOM_SASI", "room tidak bisa didelete masih ada device")
+                    } else {
+                        // 3. Jika aman (tidak ada device), lakukan penghapusan Room
+                        performDeleteRoom(roomId, onComplete)
+                    }
                 }
 
-                // Filter manual di sisi aplikasi
-                val allRooms = snapshot.children.mapNotNull { childSnapshot ->
-                    val roomData = childSnapshot.value as? MutableMap<String, Any>
-                    roomData?.set("roomId", childSnapshot.key ?: "")
-                    roomData
+                override fun onCancelled(error: DatabaseError) {
+                    // Gagal saat membaca node device (misal koneksi putus)
+                    onComplete(false, "Error checking devices: ${error.message}")
                 }
+            })
+    }
 
-                Log.d("ROOM_SASI", "Total rooms fetched: ${allRooms.size}. Now filtering for homeId: $homeId")
-
-                val filteredList = allRooms.filter { room ->
-                    val idFromData = room["homeId"] as? String
-                    // Log perbandingan untuk setiap item
-                    // Log.d("ROOM_SASI", "Comparing db.homeId:'${idFromData}' with active.homeId:'${homeId}'")
-                    idFromData == homeId
-                }
-
-                Log.d("ROOM_SASI", "Filtered list count: ${filteredList.size}")
-                onComplete(filteredList)
+    // Fungsi bantuan untuk menghapus node room (private saja)
+    private fun performDeleteRoom(roomId: String, onComplete: (Boolean, String?) -> Unit) {
+        db.child(roomId).removeValue()
+            .addOnSuccessListener {
+                onComplete(true, null)
             }
-            .addOnFailureListener { exception ->
-                Log.e("ROOM_SASI", "Failed to read rooms node", exception)
-                onComplete(emptyList())
+            .addOnFailureListener { e ->
+                onComplete(false, "Failed to delete room: ${e.message}")
             }
-        // ================== END DIAGNOSTIC ==================
     }
 }
