@@ -373,9 +373,12 @@ fun CategoryCard(
     devices: List<Device>,
     onCardClick: (DeviceCategory) -> Unit,
 ) {
-    val categoryDevices = devices.filter { it.category == category.categoryId }
-    val totalCount = categoryDevices.size
-    val activeCount = categoryDevices.count { it.status }
+    val totalCount = devices.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
+    val activeCount = devices.filter { it.status }.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
     val inactiveCount = totalCount - activeCount
 
     Card(
@@ -413,7 +416,7 @@ fun CategoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (totalCount == 1) "$totalCount Device" else "$totalCount Devices",
+                    text = if (totalCount == 1) "$totalCount Unit" else "$totalCount Units",
                     style = MaterialTheme.typography.labelSmall.copy(
                         platformStyle = PlatformTextStyle(
                             includeFontPadding = false
