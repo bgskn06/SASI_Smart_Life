@@ -17,7 +17,6 @@ class MainViewModelFactory : ViewModelProvider.Factory {
             val sceneRepo = FBSceneRepository()
             val categoryRepo = FBCategoryRepository()
             val tuyaAuthRepo = TuyaAuthRepository()
-            val scheduleRepo = FBScheduleRepository()
 
 
             return MainViewModel(
@@ -28,7 +27,6 @@ class MainViewModelFactory : ViewModelProvider.Factory {
                 sceneRepo,
                 categoryRepo,
                 tuyaAuthRepo,
-                scheduleRepo
             ) as T
         }
 

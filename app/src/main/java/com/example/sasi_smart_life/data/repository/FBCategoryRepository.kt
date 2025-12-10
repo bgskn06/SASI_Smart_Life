@@ -37,37 +37,25 @@ class FBCategoryRepository {
     }
 
     fun getCategories(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {
-        // Mengambil seluruh node /rooms untuk debugging
-        db.get()
+        db.orderByChild("homeId").equalTo(homeId).get()
             .addOnSuccessListener { snapshot ->
-                Log.d("CATEGORY_SASI", "Snapshot received. Exists: ${snapshot.exists()}. Children count: ${snapshot.childrenCount}")
-
                 if (!snapshot.exists()) {
+                    Log.d("CATEGORY_SASI", "No categories found for homeId: $homeId")
                     onComplete(emptyList())
                     return@addOnSuccessListener
                 }
 
-                // Filter manual di sisi aplikasi
-                val allCategories = snapshot.children.mapNotNull { childSnapshot ->
+                val categoryList = snapshot.children.mapNotNull { childSnapshot ->
                     val categoryData = childSnapshot.value as? MutableMap<String, Any>
                     categoryData?.set("categoryId", childSnapshot.key ?: "")
                     categoryData
                 }
 
-                Log.d("CATEGORY_SASI", "Total categories fetched: ${allCategories.size}. Now filtering for homeId: $homeId")
-
-                val filteredList = allCategories.filter { category ->
-                    val idFromData = category["homeId"] as? String
-                    // Log perbandingan untuk setiap item
-                    // Log.d("CATEGORY_SASI", "Comparing db.homeId:'${idFromData}' with active.homeId:'${homeId}'")
-                    idFromData == homeId
-                }
-
-                Log.d("CATEGORY_SASI", "Filtered list count: ${filteredList.size}")
-                onComplete(filteredList)
+                Log.d("CATEGORY_SASI", "Categories fetched: ${categoryList.size}")
+                onComplete(categoryList)
             }
             .addOnFailureListener { exception ->
-                Log.e("CATEGORY_SASI", "Failed to read categories node", exception)
+                Log.e("CATEGORY_SASI", "Failed to fetch categories", exception)
                 onComplete(emptyList())
             }
     }

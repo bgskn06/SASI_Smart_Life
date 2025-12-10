@@ -33,6 +33,7 @@ data class Device(
     val isScene: Boolean = false,
     val status: Boolean = false,
     val schedule: Map<String, Schedule> = emptyMap(),
-    val nodes: List<DeviceNode> = emptyList()
+    val nodes: List<DeviceNode> = emptyList(),
+    val isTuya: Boolean = false
 )
 

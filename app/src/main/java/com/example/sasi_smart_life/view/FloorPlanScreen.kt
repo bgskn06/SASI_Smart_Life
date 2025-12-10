@@ -87,7 +87,8 @@ fun FloorPlanScreen(
             onSettingsClick = {
                 showLocationDialog = false
                 onNavigateToSettings(it)
-            }
+            },
+            onLogoutClick = { viewModel.logout() }
         )
     }
 

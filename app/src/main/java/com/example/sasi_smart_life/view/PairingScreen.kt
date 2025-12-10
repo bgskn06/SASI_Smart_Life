@@ -321,6 +321,7 @@ fun AddDeviceCustom(
                         categoryId = selectedCategory!!.categoryId,
                         homeId = currentHome.homeId,
                         roomId = roomId,
+                        isTuya = false
                     )
                     onDeviceAdded()
                 }
@@ -431,24 +432,24 @@ fun PairingTuya(
                 }
 
                 tuyaViewModel.startPairing(context, homeId, ssid, password) { deviceBean ->
-                    // Convert DeviceBean to your custom Device model and save
                     mainViewModel.addDevice(
                         devId = deviceBean.devId,
                         name = deviceBean.name,
-                        categoryId = deviceBean.category, // You might need to map this to your own category system
+                        categoryId = deviceBean.category,
                         homeId = appState.selectedHomeId?.homeId ?: "",
-                        roomId = roomId, // Or prompt user to select a room
+                        roomId = roomId,
+                        isTuya = true
                     )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = ssid.isNotBlank() && password.isNotBlank() && pairingState.step == PairingStep.IDLE,
+            enabled = ssid.isNotBlank() && password.isNotBlank() && (pairingState.step == PairingStep.IDLE || pairingState.step == PairingStep.ERROR),
             colors = ButtonDefaults.buttonColors(sasiColor.blue500)
         ) {
-            if (pairingState.step == PairingStep.IDLE) {
-                Text("Search for Devices", color = sasiColor.blue50)
-            } else {
+            if (pairingState.step == PairingStep.SCANNING || pairingState.step ==  PairingStep.CONNECTING || pairingState.step ==  PairingStep.GET_TOKEN) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+            } else {
+                Text("Search for Devices", color = sasiColor.blue50)
             }
         }
         if (pairingState.step == PairingStep.SCANNING) {

@@ -67,7 +67,8 @@ fun SettingScreen(
             onSettingsClick = {
                 showLocationDialog = false
                 onNavigateToSettings(it)
-            }
+            },
+            onLogoutClick = { viewModel.logout() }
         )
     }
 

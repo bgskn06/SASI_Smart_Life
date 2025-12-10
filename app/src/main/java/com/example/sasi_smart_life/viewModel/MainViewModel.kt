@@ -19,7 +19,6 @@ class MainViewModel(
     private val sceneRepo: FBSceneRepository,
     private val categoryRepo: FBCategoryRepository,
     private val tuyaAuthRepo: TuyaAuthRepository,
-    private val scheduleRepo: FBScheduleRepository
 ) : ViewModel() {
 
 
@@ -81,6 +80,7 @@ class MainViewModel(
     // ----------------------------------------------------
     fun logout() {
         auth.signOut()
+        tuyaAuthRepo.logout()
         _uiState.value = AppState()
     }
 
@@ -384,6 +384,12 @@ class MainViewModel(
                 val topLevelCategory = m["category"] as? String
                 val finalCategory = topLevelCategory ?: finalDeviceNodes.firstOrNull()?.categoryId
 
+                val isTuyaValue = when (val status = m["isTuya"]) {
+                    is Boolean -> status
+                    is Long -> status == 1L
+                    else -> false
+                }
+
                 Device(
                     devId = devId,
                     name = m["name"] as? String ?: "",
@@ -394,7 +400,8 @@ class MainViewModel(
                     status = statusValue,
                     schedule = schedule,
                     nodes = finalDeviceNodes,
-                    category = finalCategory // Set the denormalized category
+                    category = finalCategory,
+                    isTuya = isTuyaValue
                 )
             }
 
@@ -423,14 +430,20 @@ class MainViewModel(
         categoryId: String,
         homeId: String,
         roomId: String?,
-        devId: String? = null // Optional devId for Tuya devices
+        devId: String? = null,
+        isTuya: Boolean = false,
+
     ) {
         val roomName = _uiState.value.rooms.find { it.roomId == roomId }?.name ?: "default"
-        val deviceCountInRoom = _uiState.value.devices.count { it.roomId == roomId }
-        val nextDeviceNumber = deviceCountInRoom + 1
-        val formattedDeviceNumber = String.format("%03d", nextDeviceNumber)
-        val newDeviceId = devId ?: "dev_${roomName}_${formattedDeviceNumber}"
 
+        val newDeviceId = if (isTuya && devId != null) {
+            devId
+        } else {
+            val deviceCountInRoom = _uiState.value.devices.count { it.roomId == roomId }
+            val nextDeviceNumber = deviceCountInRoom + 1
+            val formattedDeviceNumber = String.format("%03d", nextDeviceNumber)
+            "dev_${roomName}_${formattedDeviceNumber}"
+        }
         // A new device always starts with a single node.
         val node = DeviceNode(
             id = "node_1", // Use "node_1" as the ID for the first node
@@ -449,7 +462,8 @@ class MainViewModel(
             isOnline = true, // Assume online by default
             isScene = false,
             status = false,
-            nodes = listOf(node)
+            nodes = listOf(node),
+            isTuya = isTuya
         )
 
         deviceRepo.saveDevice(newDevice) { success, error ->

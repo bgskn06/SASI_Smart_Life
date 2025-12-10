@@ -67,7 +67,8 @@ fun LocationSelectionDialog(
     onDismissRequest: () -> Unit,
     onLocationSelected: (Home) -> Unit,
     onAddLocationClick: () -> Unit,
-    onSettingsClick: (Home) -> Unit
+    onSettingsClick: (Home) -> Unit,
+    onLogoutClick: () -> Unit
 ) {
     var selectedHome by remember { mutableStateOf(homes.find { it.homeId == currentHomeId }) }
     val gridItems = homes + "ADD_LOCATION"
@@ -100,15 +101,23 @@ fun LocationSelectionDialog(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 8.dp, end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(modifier = Modifier.size(20.dp), imageVector = Icons.Default.LocationOn, contentDescription = "Select Location", tint = sasiColor.purple500)
-                        Text(text = "Select Location", style = MaterialTheme.typography.titleSmall, color = sasiColor.purple500)
+                    Row (modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically){
+                        Row(
+                            modifier = Modifier
+                                .padding(start = 8.dp, end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(modifier = Modifier.size(20.dp), imageVector = Icons.Default.LocationOn, contentDescription = "Select Location", tint = sasiColor.purple500)
+                            Text(text = "Select Location", style = MaterialTheme.typography.titleSmall, color = sasiColor.purple500)
+                        }
+                        Button(onClick = onLogoutClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red500),
+                            elevation = ButtonDefaults.buttonElevation(0.dp)) {
+                            Text("LogOut")
+                        }
                     }
                 }
 

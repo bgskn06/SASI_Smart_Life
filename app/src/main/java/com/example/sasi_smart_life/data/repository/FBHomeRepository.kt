@@ -30,34 +30,29 @@ class FBHomeRepository {
     }
 
     fun getHomesByUser(uid: String, onComplete: (List<Map<String, Any>>) -> Unit) {
-        // ================== DIAGNOSTIC CODE ==================
-        // Mengambil seluruh node /homes untuk debugging
-        db.get()
+        db.orderByChild("ownerUid").equalTo(uid).get()
             .addOnSuccessListener { snapshot ->
-                Log.d("HOME_SASI", "Snapshot received. Exists: ${snapshot.exists()}. Children count: ${snapshot.childrenCount}")
 
                 if (!snapshot.exists()) {
+                    Log.d("HOME_SASI", "No homes found for user: $uid")
                     onComplete(emptyList())
                     return@addOnSuccessListener
                 }
 
-                // Filter manual di sisi aplikasi
-                val list = snapshot.children.mapNotNull { childSnapshot ->
+                // Data yang turun sudah pasti milik user ini, jadi tidak perlu .filter lagi
+                val homeList = snapshot.children.mapNotNull { childSnapshot ->
                     val homeData = childSnapshot.value as? MutableMap<String, Any>
                     homeData?.set("homeId", childSnapshot.key ?: "")
                     homeData
-                }.filter { home ->
-                    home["ownerUid"] == uid
                 }
-                
-                Log.d("HOME_SASI", "Filtered list count: ${list.size}")
-                onComplete(list)
+
+                Log.d("HOME_SASI", "Homes fetched: ${homeList.size}")
+                onComplete(homeList)
             }
             .addOnFailureListener { exception ->
-                Log.e("HOME_SASI", "Failed to read homes node", exception)
+                Log.e("HOME_SASI", "Failed to fetch homes", exception)
                 onComplete(emptyList())
             }
-        // ================== END DIAGNOSTIC ==================
     }
 
     fun updateTuyaHomeId(homeId: String, tuyaHomeId: Long, onComplete: (Boolean) -> Unit) {
