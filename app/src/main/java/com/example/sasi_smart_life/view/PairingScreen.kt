@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -54,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -321,7 +326,7 @@ fun AddDeviceCustom(
                         categoryId = selectedCategory!!.categoryId,
                         homeId = currentHome.homeId,
                         roomId = roomId,
-                        isTuya = false
+                        isTuya = false,
                     )
                     onDeviceAdded()
                 }
@@ -344,6 +349,7 @@ fun PairingTuya(
     roomId: String?
 ) {
     val context = LocalContext.current
+    var wifi by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val pairingState by tuyaViewModel.pairingState.collectAsState()
@@ -354,6 +360,9 @@ fun PairingTuya(
         cursorColor = sasiColor.purple500,
         focusedLabelColor = sasiColor.black300,
     )
+    var useAPMode by remember { mutableStateOf(false) }
+    var isTokenReady by remember { mutableStateOf(false) }
+    LaunchedEffect(useAPMode) { isTokenReady = false }
 
 
     LaunchedEffect(pairingState.step) {
@@ -363,6 +372,7 @@ fun PairingTuya(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+
         // WIFI STATUS CARD
         Box(modifier = Modifier
             .fillMaxWidth()
@@ -404,7 +414,17 @@ fun PairingTuya(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (useAPMode) {
+            OutlinedTextField(
+                value = wifi,
+                onValueChange = { wifi = it },
+                label = { Text("Wi-Fi SSID") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = colorTextfield
+            )
+        }
 
         OutlinedTextField(
             value = password,
@@ -421,45 +441,181 @@ fun PairingTuya(
             colors = colorTextfield
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Button(
-            onClick = { 
-                val homeId = appState.selectedHomeId?.tuyaHomeId
-                if (homeId == null) {
-                    Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
-                    return@Button
-                }
-
-                tuyaViewModel.startPairing(context, homeId, ssid, password) { deviceBean ->
-                    mainViewModel.addDevice(
-                        devId = deviceBean.devId,
-                        name = deviceBean.name,
-                        categoryId = deviceBean.category,
-                        homeId = appState.selectedHomeId?.homeId ?: "",
-                        roomId = roomId,
-                        isTuya = true
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = ssid.isNotBlank() && password.isNotBlank() && (pairingState.step == PairingStep.IDLE || pairingState.step == PairingStep.ERROR),
-            colors = ButtonDefaults.buttonColors(sasiColor.blue500)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .clickable { useAPMode = !useAPMode }
         ) {
-            if (pairingState.step == PairingStep.SCANNING || pairingState.step ==  PairingStep.CONNECTING || pairingState.step ==  PairingStep.GET_TOKEN) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-            } else {
-                Text("Search for Devices", color = sasiColor.blue50)
+            Switch(
+                checked = useAPMode,
+                onCheckedChange = { useAPMode = it },
+                modifier = Modifier.scale(0.8f),
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = sasiColor.grey50,
+                    uncheckedThumbColor = sasiColor.grey50,
+                    checkedTrackColor = sasiColor.green500,
+                    uncheckedTrackColor = sasiColor.black50,
+                    uncheckedBorderColor = sasiColor.black50
+                )
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = if (useAPMode) "AP Mode (Kedip Lambat)" else "EZ Mode (Kedip Cepat)",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (useAPMode) "Gunakan jika EZ Mode gagal (Time Out)" else "Cara standar, paling mudah",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
             }
         }
-        if (pairingState.step == PairingStep.SCANNING) {
-            Text("Searching...", modifier = Modifier.padding(top = 8.dp))
+        if (useAPMode) {
+
+            if (!isTokenReady) {
+                // TAHAP 1: User belum ambil token
+                Text(
+                    text = "Langkah 1: Persiapan",
+                    fontWeight = FontWeight.Bold, color = sasiColor.blue500
+                )
+                Text("Pastikan HP terkoneksi ke Internet (Wi-Fi Rumah) untuk mengambil tiket pairing.")
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        val homeId = appState.selectedHomeId?.tuyaHomeId ?: return@Button
+                        tuyaViewModel.getApModeToken(homeId) { success ->
+                            isTokenReady = success
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(sasiColor.purple500)
+                ) {
+                    if (pairingState.step == PairingStep.GET_TOKEN) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("Ambil Token Pairing")
+                    }
+                }
+
+            } else {
+                // TAHAP 2: Token sudah ada, Tampilkan Instruksi Kuning
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                    border = BorderStroke(1.dp, Color(0xFFFFC107)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Langkah 2: Koneksi Alat", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                        Text("1. Reset alat -> Kedip LAMBAT.")
+                        Text("2. Connect HP ke Wi-Fi 'SmartLife-xxxx'.")
+                        Button(
+                            onClick = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107), contentColor = Color.Black),
+                        ) {
+                            Text("Buka Setting Wi-Fi")
+                        }
+                        Text("3. Kembali ke sini & Klik tombol CONNECT di bawah.")
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        val homeId = appState.selectedHomeId?.tuyaHomeId
+                        if (homeId == null) {
+                            Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        tuyaViewModel.startPairing(context, homeId,  wifi , password,useAPMode) { deviceBean ->
+                            val dpsMap = deviceBean.dps ?: emptyMap<String, Any>()
+                            mainViewModel.addDevice(
+                                devId = deviceBean.devId,
+                                name = deviceBean.name,
+                                categoryId = deviceBean.productBean.category,
+                                homeId = appState.selectedHomeId?.homeId ?: "",
+                                roomId = roomId,
+                                isTuya = true,
+                                iconUrl = deviceBean.iconUrl,
+                                ip = deviceBean.ip,
+                                mac = deviceBean.mac,
+                                initialDps = dpsMap
+
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(sasiColor.blue500)
+                ) {
+                    if (pairingState.step == PairingStep.SCANNING) {
+                        Text("Sedang Mencari Device...")
+                    } else {
+                        Text("CONNECT & MULAI PAIRING")
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "Pastikan indikator device berkedip CEPAT (2x per detik).",
+                color = sasiColor.purple500,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Button(
+                onClick = {
+                    val homeId = appState.selectedHomeId?.tuyaHomeId
+                    if (homeId == null) {
+                        Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+
+                    tuyaViewModel.startPairing(context, homeId,  ssid, password,useAPMode) { deviceBean ->
+                        val dpsMap = deviceBean.dps ?: emptyMap<String, Any>()
+                        mainViewModel.addDevice(
+                            devId = deviceBean.devId,
+                            name = deviceBean.name,
+                            categoryId = deviceBean.productBean.category,
+                            homeId = appState.selectedHomeId?.homeId ?: "",
+                            roomId = roomId,
+                            isTuya = true,
+                            iconUrl = deviceBean.iconUrl,
+                            ip = deviceBean.ip,
+                            mac = deviceBean.mac,
+                            initialDps = dpsMap
+
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = ssid.isNotBlank() && password.isNotBlank() && (pairingState.step == PairingStep.IDLE || pairingState.step == PairingStep.ERROR),
+                colors = ButtonDefaults.buttonColors(sasiColor.blue500)
+            ) {
+                if (pairingState.step == PairingStep.SCANNING || pairingState.step ==  PairingStep.CONNECTING || pairingState.step ==  PairingStep.GET_TOKEN) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (useAPMode) "Mencari via Hotspot..." else "Mencari via Broadcast...")
+                } else {
+                    Text(if (useAPMode) "Connect & Cari Perangkat" else "Cari Perangkat")
+                }
+            }
+            if (pairingState.step == PairingStep.SCANNING) {
+                Text("Searching...", modifier = Modifier.padding(top = 8.dp))
+            }
+            if (pairingState.step == PairingStep.CONNECTING) {
+                Text("Connecting to device...", modifier = Modifier.padding(top = 8.dp))
+            }
+            if (pairingState.step == PairingStep.SUCCESS) {
+                Text("Pairing successful!", color = sasiColor.green500)
+            }
         }
-        if (pairingState.step == PairingStep.CONNECTING) {
-            Text("Connecting to device...", modifier = Modifier.padding(top = 8.dp))
-        }
-        if (pairingState.step == PairingStep.SUCCESS) {
-            Text("Pairing successful!", color = sasiColor.green500)
-        }
+
+
     }
 }

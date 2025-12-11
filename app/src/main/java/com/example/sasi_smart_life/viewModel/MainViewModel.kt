@@ -1,6 +1,7 @@
 package com.example.sasi_smart_life.viewModel
 
 import android.util.Log
+import androidx.collection.intIntMapOf
 import androidx.lifecycle.ViewModel
 import com.example.sasi_smart_life.data.models.*
 import com.example.sasi_smart_life.data.repository.*
@@ -8,6 +9,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.thingclips.smart.home.sdk.ThingHomeSdk
 import com.thingclips.smart.home.sdk.bean.HomeBean
 import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
+import com.thingclips.smart.sdk.api.IResultCallback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -390,6 +392,25 @@ class MainViewModel(
                     else -> false
                 }
 
+                val tuyaInfo = m["tuyaInfo"] as? Map<String, Any>
+
+                val finalTuyaInfo = if (tuyaInfo != null) {
+                    TuyaInfo(
+                        iconUrl = tuyaInfo["iconUrl"] as? String,
+                        dps = (tuyaInfo["dps"] as? Map<String, Any>) ?: emptyMap(),
+                        isOnline = when (val s = tuyaInfo["isOnline"]) {
+                            is Boolean -> s
+                            is Long -> s == 1L
+                            else -> false
+                        },
+                        category = tuyaInfo["category"] as? String,
+                        ip = tuyaInfo["ip"] as? String,
+                        mac = tuyaInfo["mac"] as? String
+                    )
+                } else {
+                    null
+                }
+
                 Device(
                     devId = devId,
                     name = m["name"] as? String ?: "",
@@ -401,7 +422,8 @@ class MainViewModel(
                     schedule = schedule,
                     nodes = finalDeviceNodes,
                     category = finalCategory,
-                    isTuya = isTuyaValue
+                    isTuya = isTuyaValue,
+                    tuyaInfo = finalTuyaInfo
                 )
             }
 
@@ -432,7 +454,10 @@ class MainViewModel(
         roomId: String?,
         devId: String? = null,
         isTuya: Boolean = false,
-
+        iconUrl: String? = null,
+        ip: String? = null,
+        mac: String? = null,
+        initialDps: Map<String, Any> = emptyMap()
     ) {
         val roomName = _uiState.value.rooms.find { it.roomId == roomId }?.name ?: "default"
 
@@ -453,6 +478,15 @@ class MainViewModel(
             rotation = 0f
         )
 
+        val tuyaInfo = TuyaInfo(
+            iconUrl = iconUrl,
+            dps = initialDps,
+            isOnline = true,
+            category = categoryId,
+            ip = ip,
+            mac = mac
+        )
+
         val newDevice = Device(
             devId = newDeviceId,
             name = name,
@@ -463,7 +497,8 @@ class MainViewModel(
             isScene = false,
             status = false,
             nodes = listOf(node),
-            isTuya = isTuya
+            isTuya = isTuya,
+            tuyaInfo = tuyaInfo
         )
 
         deviceRepo.saveDevice(newDevice) { success, error ->
@@ -503,6 +538,34 @@ class MainViewModel(
             }
         }
     }
+
+    fun deleteDevice(device: Device) {
+
+        val onFirebaseComplete: (Boolean, String?) -> Unit = { success, message ->
+            if (success) {
+            } else {
+            }
+        }
+
+        if (device.isTuya) {
+            ThingHomeSdk.newDeviceInstance(device.devId)?.removeDevice(object : IResultCallback {
+                    override fun onSuccess() {
+                        Log.d(tag, "Berhasil unbind Tuya: ${device.devId}")
+                        deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
+                    }
+
+                    override fun onError(code: String?, error: String?) {
+                        Log.e(tag, "Gagal unbind Tuya: ${device.devId} $error")
+                        deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
+                    }
+                }
+            )
+        } else {
+            deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
+        }
+    }
+
+
 
     // ----------------------------------------------------
     // DEVICE CATEGORY

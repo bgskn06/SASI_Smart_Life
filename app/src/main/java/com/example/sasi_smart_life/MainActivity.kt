@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +16,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -27,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sasi_smart_life.view.theme.SasiTheme
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import com.example.sasi_smart_life.viewModel.MainViewModelFactory
+import com.example.sasi_smart_life.viewModel.TuyaViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -55,6 +58,17 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SasiApp(viewModel: MainViewModel) {
+    val tuyaViewModel: TuyaViewModel = viewModel()
+    val appState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(appState.selectedHomeId?.homeId) {
+        val selectedHome = appState.selectedHomeId
+
+        if (selectedHome != null && selectedHome.tuyaHomeId != 0L) {
+            tuyaViewModel.startListeningToHome(selectedHome.tuyaHomeId)
+        }
+    }
+
     SasiTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             val locationPermissionState = rememberPermissionState(

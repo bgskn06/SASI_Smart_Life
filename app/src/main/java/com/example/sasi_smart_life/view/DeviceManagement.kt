@@ -1,8 +1,10 @@
 package com.example.sasi_smart_life.view
 
+import android.app.AlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -79,6 +82,8 @@ fun DeviceManagementScreen(
 
     val currentRoom = appState.rooms.find { it.roomId == roomId }
     val currentHome = appState.selectedHomeId
+
+    var deviceToDelete by remember { mutableStateOf<Device?>(null) }
 
     var selectedDeviceForDetail by remember { mutableStateOf<Device?>(null) }
 
@@ -137,10 +142,47 @@ fun DeviceManagementScreen(
                     if (roomId != null) {
                         viewModel.setDeviceStatus(devId, roomId, newStatus)
                     }
+                },
+                onDeleteRequest = { device ->
+                    deviceToDelete = device
                 }
             )
         }
     }
+
+    if (deviceToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            title = { Text("Hapus Perangkat?") },
+            text = {
+                Text(
+                    "Anda yakin ingin menghapus '${deviceToDelete?.name}'? " +
+                            if (deviceToDelete?.isTuya == true) "Perangkat akan di-reset dari cloud." else ""
+                )
+            },
+            containerColor = Color.White,
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteDevice(deviceToDelete!!)
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red500)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick =  { deviceToDelete = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red50)
+                ) {
+                    Text("Cancel", color = sasiColor.red500)
+                }
+            }
+        )
+    }
+
     if (isPairing) {
         val tuyaViewModel: TuyaViewModel = viewModel()
         PairingScreen(
@@ -291,7 +333,8 @@ private fun Body(
     categories: List<DeviceCategory>,
     onAddDeviceClicked: () -> Unit,
     onDeviceClicked: (Device) -> Unit,
-    onStatusChange: (devId: String, newStatus: Boolean) -> Unit
+    onStatusChange: (devId: String, newStatus: Boolean) -> Unit,
+    onDeleteRequest: (Device) -> Unit
 ) {
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -327,7 +370,8 @@ private fun Body(
                         device = device,
                         categories = categories,
                         onClick = { onDeviceClicked(device) },
-                        onStatusChange = onStatusChange
+                        onStatusChange = onStatusChange,
+                        onLongClick = { onDeleteRequest(device) }
                     )
                 }
                 item {
@@ -380,9 +424,15 @@ private fun DeviceCard(
     device: Device,
     categories: List<DeviceCategory>,
     onClick: () -> Unit,
-    onStatusChange: (devId: String, newStatus: Boolean) -> Unit
+    onStatusChange: (devId: String, newStatus: Boolean) -> Unit,
+    onLongClick: () -> Unit
 ) {
-    val categoryImage = categories.find { it.categoryId == device.category }?.imageUrlOn
+    val categoryData = categories.find { it.categoryId == device.category }
+    val finalImageUrl = if (device.isTuya && !device.tuyaInfo?.iconUrl.isNullOrEmpty()) {
+        device.tuyaInfo.iconUrl
+    } else {
+        categoryData?.imageUrlOn
+    }
     val categoryName = categories.find { it.categoryId == device.category }?.name
     val bg = if (device.status) sasiColor.purple300 else sasiColor.grey50
     val textColorPrimary = if (device.status) sasiColor.grey50 else sasiColor.black500
@@ -391,7 +441,10 @@ private fun DeviceCard(
     Card(
         modifier = Modifier
             .height(130.dp)
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = sasiColor.blue50),
     ) {
         Card(
@@ -414,7 +467,7 @@ private fun DeviceCard(
                     color = sasiColor.blue50
                 ) {
                     AsyncImage(
-                        model = categoryImage,
+                        model = finalImageUrl,
                         placeholder = painterResource(id = R.drawable.logo_sag),
                         error = painterResource(id = R.drawable.scene_empty),
                         contentDescription = device.name,

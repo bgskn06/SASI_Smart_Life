@@ -1,5 +1,6 @@
 package com.example.sasi_smart_life.data.repository
 
+import android.util.Log
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceNode
 import com.example.sasi_smart_life.data.models.Schedule
@@ -19,53 +20,7 @@ class FBDeviceRepository {
 
     private var devicesListener: ValueEventListener? = null
 
-    suspend fun getAllDevices(): List<Device> {
-        val snapshot = db.child("device").get().await()
-        if (!snapshot.exists()) {
-            return emptyList()
-        }
-        // Deserialize the data from Firebase manually
-        return snapshot.children.mapNotNull { childSnapshot ->
-            val deviceData = childSnapshot.value as? Map<String, @JvmSuppressWildcards Any>
-            deviceData?.let {
-                val devId = childSnapshot.key ?: ""
-
-                val scheduleMap = it["schedule"] as? Map<String, Map<String, Any>>
-                val schedule = scheduleMap?.mapValues { entry ->
-                    val data = entry.value
-                    Schedule(
-                        On = data["On"] as? String ?: "",
-                        Off = data["Off"] as? String ?: "",
-                        Status = (data["Status"] as? Long)?.toInt() ?: 0
-                    )
-                }
-
-                val nodesMap = it["nodes"] as? Map<String, Map<String, Any>>
-                val nodes = nodesMap?.values?.mapNotNull { nodeData ->
-                    DeviceNode(
-                        id = nodeData["id"] as? String ?: "",
-                        categoryId = nodeData["categoryId"] as? String ?: "",
-                        x = (nodeData["x"] as? Number)?.toFloat() ?: 0f,
-                        y = (nodeData["y"] as? Number)?.toFloat() ?: 0f,
-                        rotation = (nodeData["rotation"] as? Number)?.toFloat() ?: 0f
-                    )
-                } ?: emptyList()
-
-                Device(
-                    devId = devId,
-                    name = it["name"] as? String ?: "",
-                    category = it["category"] as? String ?: "",
-                    homeId = it["homeId"] as? String ?: "",
-                    roomId = it["roomId"] as? String,
-                    isOnline = (it["isOnline"] as? Long)?.toInt() == 1,
-                    isScene = (it["isScene"] as? Long)?.toInt() == 1,
-                    status = (it["status"] as? Long)?.toInt() == 1,
-                    schedule = schedule ?: emptyMap(),
-                    nodes = nodes
-                )
-            }
-        }
-    }
+    val tag = "DEVICE_SASI"
 
     fun saveDevice(device: Device, onComplete: (Boolean, String?) -> Unit) {
         val scheduleForFirebase = device.schedule?.mapValues { entry ->
@@ -76,17 +31,30 @@ class FBDeviceRepository {
             )
         }
 
+        val tuyaInfoMap = if (device.tuyaInfo != null) {
+            mapOf(
+                "iconUrl" to device.tuyaInfo.iconUrl,
+                "dps" to device.tuyaInfo.dps,
+                "isOnline" to device.tuyaInfo.isOnline,
+                "category" to device.tuyaInfo.category,
+                "ip" to device.tuyaInfo.ip,
+                "mac" to device.tuyaInfo.mac
+            )
+        } else null
+
         val deviceData = mapOf(
             "devId" to device.devId,
             "name" to device.name,
-            "category" to device.category, // Denormalized category
+            "category" to device.category,
             "homeId" to device.homeId,
             "roomId" to device.roomId,
             "isOnline" to if (device.isOnline) 1 else 0,
             "isScene" to if (device.isScene) 1 else 0,
             "status" to if (device.status) 1 else 0,
             "schedule" to scheduleForFirebase,
-            "nodes" to device.nodes.associateBy { it.id } // Save nodes as a map
+            "nodes" to device.nodes.associateBy { it.id },
+            "isTuya" to device.isTuya,
+            "tuyaInfo" to tuyaInfoMap
         )
 
         db.child("device").child(device.devId)
@@ -155,18 +123,6 @@ class FBDeviceRepository {
             .addOnFailureListener { e -> onComplete(false, e.message) }
     }
 
-    suspend fun updateDeviceStatusSuspend(devId: String, roomId: String, newStatus: Boolean): Boolean =
-        suspendCancellableCoroutine { continuation ->
-            val statusValue = if (newStatus) 1 else 0
-            val updates = mapOf(
-                "/device/$devId/status" to statusValue,
-                "/status/$roomId/$devId" to statusValue
-            )
-            db.updateChildren(updates)
-                .addOnSuccessListener { continuation.resume(true) }
-                .addOnFailureListener { continuation.resume(false) }
-        }
-
     fun updateDeviceNodePosition(devId: String, nodeId: String, x: Float, y: Float, onComplete: (Boolean, String?) -> Unit) {
         val positionUpdates = mapOf(
             "x" to x,
@@ -209,5 +165,28 @@ class FBDeviceRepository {
         devicesListener?.let {
             db.child("device").removeEventListener(it)
         }
+    }
+
+    fun deleteDevice(devId: String, onComplete: (Boolean, String?) -> Unit) {
+
+        // Path harus sama persis dengan saveDevice: db.child("device").child(devId)
+        db.child("device").child(devId)
+            .removeValue()
+            .addOnSuccessListener {
+                Log.d(tag, "Device $devId berhasil dihapus")
+                onComplete(true, null)
+            }
+            .addOnFailureListener { e ->
+                Log.e(tag, "Gagal hapus device $devId", e)
+                onComplete(false, e.message)
+            }
+    }
+
+    fun updateDp(devId: String, updates: Map<String, Any>){
+        db.child("device").child(devId).child("tuyaInfo").child("dps")
+            .updateChildren(updates)
+            .addOnFailureListener { e ->
+                Log.e("Firebase", "Gagal update DP $updates", e)
+            }
     }
 }

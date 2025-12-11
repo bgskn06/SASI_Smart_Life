@@ -15,9 +15,6 @@ class TuyaPairingRepository {
     private var mThingActivator: IThingActivator? = null
     private val tag = "TuyaPairing_SASI"
 
-    /**
-     * Tahap 1: Dapatkan Token Pairing dari Server Tuya
-     */
     fun getPairingToken(homeId: Long, onResult: (String?) -> Unit) {
         ThingHomeSdk.getActivatorInstance().getActivatorToken(
             homeId,
@@ -35,24 +32,18 @@ class TuyaPairingRepository {
         )
     }
 
-    /**
-     * Tahap 2: Mulai Scanning (EZ Mode)
-     */
     fun startPairing(
         context: Context,
         ssid: String,
         password: String,
         token: String,
+        mode: ActivatorModelEnum,
         onDeviceFound: (DeviceBean) -> Unit,
         onError: (String) -> Unit
     ) {
-        // Hentikan proses lama jika ada
         stopPairing()
-
-        // Setup Listener (Callback saat device ditemukan/gagal)
         val listener = object : IThingSmartActivatorListener {
             override fun onStep(step: String?, data: Any?) {
-                // Info step pairing (misal: "device found, registering to cloud...")
                 Log.d(tag, "Step: $step")
             }
 
@@ -69,17 +60,29 @@ class TuyaPairingRepository {
             }
         }
 
-        // Konfigurasi Activator (EZ Mode)
-        mThingActivator = ThingHomeSdk.getActivatorInstance().newMultiActivator(
-            ActivatorBuilder()
-                .setContext(context)
-                .setSsid(ssid)
-                .setPassword(password)
-                .setActivatorModel(ActivatorModelEnum.THING_EZ) // Mode EZ (Kedip Cepat)
-                .setTimeOut(100) // Timeout 100 detik
-                .setToken(token)
-                .setListener(listener)
-        )
+        if (mode == ActivatorModelEnum.THING_AP) {
+            mThingActivator = ThingHomeSdk.getActivatorInstance().newActivator(
+                ActivatorBuilder()
+                    .setContext(context)
+                    .setSsid(ssid)
+                    .setPassword(password)
+                    .setActivatorModel(ActivatorModelEnum.THING_AP)
+                    .setTimeOut(120)
+                    .setToken(token)
+                    .setListener(listener)
+            )
+        } else {
+            mThingActivator = ThingHomeSdk.getActivatorInstance().newMultiActivator(
+                ActivatorBuilder()
+                    .setContext(context)
+                    .setSsid(ssid)
+                    .setPassword(password)
+                    .setActivatorModel(ActivatorModelEnum.THING_EZ)
+                    .setTimeOut(100)
+                    .setToken(token)
+                    .setListener(listener)
+            )
+        }
 
         // Mulai!
         mThingActivator?.start()

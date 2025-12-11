@@ -22,6 +22,14 @@ data class Schedule(
     val Off: String = "",
     val Status: Int = 0
 )
+data class TuyaInfo(
+    val iconUrl: String? = null,
+    val dps: Map<String, Any> = emptyMap(),
+    val isOnline: Boolean = false,
+    val category: String? = null,
+    val ip: String? = null,
+    val mac: String? = null
+)
 
 data class Device(
     val devId: String = "",
@@ -34,6 +42,7 @@ data class Device(
     val status: Boolean = false,
     val schedule: Map<String, Schedule> = emptyMap(),
     val nodes: List<DeviceNode> = emptyList(),
-    val isTuya: Boolean = false
+    val isTuya: Boolean = false,
+    val tuyaInfo: TuyaInfo? = null
 )
 
