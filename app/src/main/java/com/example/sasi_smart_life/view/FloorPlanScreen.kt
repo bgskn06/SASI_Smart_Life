@@ -225,7 +225,9 @@ private fun DraggableNodeIcon(
             .then(dragModifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 if (device.roomId != null) {
-                    viewModel.setDeviceStatus(device.devId, device.roomId, !device.status)
+                    if(!device.isTuya){
+                        viewModel.setDeviceStatus(device.devId, device.roomId, !device.status)
+                    }
                 }
             }
             .rotate(node.rotation)
@@ -243,6 +245,7 @@ private fun DraggableNodeIcon(
                     else if(category?.name == "Lampu KMI") 148.dp
                     else if(category?.name == "Street Lamp") 108.dp
                     else if(category?.name == "Spot Lamp") 24.dp
+                    else if(category?.name == "Door Sensor") 56.dp
                     else 36.dp)
             )
             if (isBeingDragged) {
