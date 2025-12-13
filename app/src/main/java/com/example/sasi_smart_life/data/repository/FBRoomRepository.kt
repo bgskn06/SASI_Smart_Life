@@ -87,7 +87,7 @@ class FBRoomRepository {
                         roomData?.set("roomId", childSnapshot.key ?: "")
                         roomData
                     }
-                    Log.d("ROOM_SASI", "Rooms fetched: ${roomList.size}")
+//                    Log.d("ROOM_SASI", "Rooms fetched: ${roomList.size}")
                     onComplete(roomList)
                 }
 

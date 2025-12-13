@@ -3,6 +3,7 @@ package com.example.sasi_smart_life.viewModel
 import android.util.Log
 import androidx.collection.intIntMapOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.sasi_smart_life.data.models.*
 import com.example.sasi_smart_life.data.repository.*
 import com.google.firebase.auth.FirebaseAuth
@@ -12,6 +13,8 @@ import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
 import com.thingclips.smart.sdk.api.IResultCallback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
 
 class MainViewModel(
     private val userRepo: FBUserRepository,
@@ -565,6 +568,35 @@ class MainViewModel(
         }
     }
 
+    private val _smartLockLogs = MutableStateFlow<List<SmartLockLog>>(emptyList())
+    val smartLockLogs = _smartLockLogs.asStateFlow()
+
+    fun listenToSmartLockLogs(devId: String) {
+        viewModelScope.launch {
+            deviceRepo.getSmartLockLogs(devId)
+                .catch { e ->
+                    Log.e("MainVM", "Gagal load logs: ${e.message}")
+                }
+                .collect { logs ->
+                    _smartLockLogs.value = logs
+                }
+        }
+    }
+
+    private val _doorSensorLogs = MutableStateFlow<List<DoorSensorLog>>(emptyList())
+    val doorSensorLogs = _doorSensorLogs.asStateFlow()
+
+    fun listenToDoorSensorLogs(devId: String) {
+        viewModelScope.launch {
+            deviceRepo.getDoorSensorLogs(devId)
+                .catch { e ->
+                    Log.e("MainVM", "Gagal load logs: ${e.message}")
+                }
+                .collect { logs ->
+                    _doorSensorLogs.value = logs
+                }
+        }
+    }
 
 
     // ----------------------------------------------------

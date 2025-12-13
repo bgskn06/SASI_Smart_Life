@@ -3,11 +3,16 @@ package com.example.sasi_smart_life.data.repository
 import android.util.Log
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceNode
+import com.example.sasi_smart_life.data.models.DoorSensorLog
 import com.example.sasi_smart_life.data.models.Schedule
+import com.example.sasi_smart_life.data.models.SmartLockLog
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
@@ -183,10 +188,101 @@ class FBDeviceRepository {
     }
 
     fun updateDp(devId: String, updates: Map<String, Any>){
-        db.child("device").child(devId).child("tuyaInfo").child("dps")
+        db.child("device").child(devId)
             .updateChildren(updates)
             .addOnFailureListener { e ->
                 Log.e("Firebase", "Gagal update DP $updates", e)
             }
+    }
+
+    fun addLogHistory(devId: String, logData: Map<String, Any>, timestampId: Long) {
+
+        val logId = timestampId.toString()
+
+        db.child("device").child(devId).child("logs")
+            .child(logId)
+            .setValue(logData)
+            .addOnFailureListener {
+                Log.e("Firebase", "Gagal simpan log", it)
+            }
+    }
+
+    fun getSmartLockLogs(devId: String): Flow<List<SmartLockLog>> = callbackFlow {
+
+        // Reference ke node logs
+        val logsRef = db.child("device").child(devId).child("logs").limitToLast(50)
+
+        // Buat Listener Firebase
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val logsList = mutableListOf<SmartLockLog>()
+
+                for (child in snapshot.children) {
+                    try {
+                        val log = SmartLockLog(
+                            id = child.key ?: "",
+                            description = child.child("description").getValue(String::class.java) ?: "",
+                            time = child.child("time").getValue(String::class.java) ?: "-",
+                            status = child.child("status").getValue(String::class.java) ?: "",
+                            method = child.child("method").getValue(String::class.java) ?: "UNKNOWN"
+                        )
+                        logsList.add(log)
+                    } catch (e: Exception) {
+                        Log.e("Repo", "Error parsing log: ${e.message}")
+                    }
+                }
+
+                trySend(logsList.reversed())
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+
+        logsRef.addValueEventListener(listener)
+
+        awaitClose {
+            logsRef.removeEventListener(listener)
+            Log.d("Repo", "Listener Log dilepas untuk $devId")
+        }
+    }
+
+    fun getDoorSensorLogs(devId: String): Flow<List<DoorSensorLog>> = callbackFlow {
+
+        val logsRef = db.child("device").child(devId).child("logs").limitToLast(50)
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val logsList = mutableListOf<DoorSensorLog>()
+
+                for (child in snapshot.children) {
+                    try {
+                        val log = DoorSensorLog(
+                            id = child.key ?: "",
+                            description = child.child("description").getValue(String::class.java) ?: "",
+                            time = child.child("time").getValue(String::class.java) ?: "-",
+                            status = child.child("status").getValue(String::class.java) ?: "",
+                        )
+                        logsList.add(log)
+                    } catch (e: Exception) {
+                        Log.e("Repo", "Error parsing log: ${e.message}")
+                    }
+                }
+
+                trySend(logsList.reversed())
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+
+        logsRef.addValueEventListener(listener)
+
+        awaitClose {
+            logsRef.removeEventListener(listener)
+            Log.d("Repo", "Listener Log dilepas untuk $devId")
+        }
     }
 }

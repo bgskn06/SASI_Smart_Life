@@ -40,7 +40,7 @@ class FBCategoryRepository {
         db.orderByChild("homeId").equalTo(homeId).get()
             .addOnSuccessListener { snapshot ->
                 if (!snapshot.exists()) {
-                    Log.d("CATEGORY_SASI", "No categories found for homeId: $homeId")
+//                    Log.d("CATEGORY_SASI", "No categories found for homeId: $homeId")
                     onComplete(emptyList())
                     return@addOnSuccessListener
                 }
@@ -51,7 +51,7 @@ class FBCategoryRepository {
                     categoryData
                 }
 
-                Log.d("CATEGORY_SASI", "Categories fetched: ${categoryList.size}")
+//                Log.d("CATEGORY_SASI", "Categories fetched: ${categoryList.size}")
                 onComplete(categoryList)
             }
             .addOnFailureListener { exception ->

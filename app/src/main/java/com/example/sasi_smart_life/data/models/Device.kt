@@ -46,3 +46,18 @@ data class Device(
     val tuyaInfo: TuyaInfo? = null
 )
 
+data class SmartLockLog(
+    val id: String = "",
+    val description: String = "", // "Pintu Dibuka Oleh Id : 123..."
+    val time: String = "",        // "12 Des 10:00:00"
+    val status: String = "",      // "OPEN"
+    val method: String = "UNKNOWN" // "CARD", "FINGERPRINT", "PASSWORD", dll
+)
+
+data class DoorSensorLog(
+    val id: String = "",
+    val description: String = "",
+    val time: String = "",
+    val status: String = "",
+)
+

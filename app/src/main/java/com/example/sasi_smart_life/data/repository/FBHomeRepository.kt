@@ -34,19 +34,18 @@ class FBHomeRepository {
             .addOnSuccessListener { snapshot ->
 
                 if (!snapshot.exists()) {
-                    Log.d("HOME_SASI", "No homes found for user: $uid")
+//                    Log.d("HOME_SASI", "No homes found for user: $uid")
                     onComplete(emptyList())
                     return@addOnSuccessListener
                 }
 
-                // Data yang turun sudah pasti milik user ini, jadi tidak perlu .filter lagi
                 val homeList = snapshot.children.mapNotNull { childSnapshot ->
                     val homeData = childSnapshot.value as? MutableMap<String, Any>
                     homeData?.set("homeId", childSnapshot.key ?: "")
                     homeData
                 }
 
-                Log.d("HOME_SASI", "Homes fetched: ${homeList.size}")
+//                Log.d("HOME_SASI", "Homes fetched: ${homeList.size}")
                 onComplete(homeList)
             }
             .addOnFailureListener { exception ->

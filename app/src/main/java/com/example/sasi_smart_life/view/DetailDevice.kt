@@ -1,5 +1,6 @@
 package com.example.sasi_smart_life.view
 
+import android.inputmethodservice.Keyboard
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,7 +26,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Pin
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -40,6 +47,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +66,9 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceCategory
+import com.example.sasi_smart_life.data.models.DoorSensorLog
 import com.example.sasi_smart_life.data.models.Schedule
+import com.example.sasi_smart_life.data.models.SmartLockLog
 import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
 
@@ -67,6 +77,7 @@ data class TimePickerContext(val day: String, val type: String) // type can be "
 
 @Composable
 fun DetailDeviceDialog(
+    device: Device,
     viewModel: MainViewModel,
     devId: String?,
     onBack: () -> Unit,
@@ -82,8 +93,12 @@ fun DetailDeviceDialog(
         }
         return
     }
-
-    val categoryImage = categories.find { it.categoryId == currentDevice.category }?.imageUrlOn
+    val categoryData = categories.find { it.categoryId == device.category }
+    val finalImageUrl = if (device.isTuya && !device.tuyaInfo?.iconUrl.isNullOrEmpty()) {
+        device.tuyaInfo.iconUrl
+    } else {
+        categoryData?.imageUrlOn
+    }
     val categoryName = categories.find { it.categoryId == currentDevice.category }?.name
 
     Dialog(onDismissRequest = onBack) {
@@ -129,7 +144,7 @@ fun DetailDeviceDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(
-                            model = categoryImage,
+                            model = finalImageUrl,
                             contentDescription = "Device Image",
                             modifier = Modifier
                                 .size(60.dp)
@@ -140,7 +155,7 @@ fun DetailDeviceDialog(
                         Column(modifier = Modifier.weight(0.65f)) {
                             Text(currentDevice.name, style = MaterialTheme.typography.titleMedium)
                             Text(
-                                text = categoryName ?: "Unknown Category",
+                                text = categoryName ?: "Tuya Device",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = sasiColor.black300,
                             )
@@ -231,23 +246,46 @@ fun DetailDeviceDialog(
                                 )
                                 .padding(horizontal = 12.dp),)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Schedule",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (selectedTab == "Schedule") sasiColor.blue50 else sasiColor.black300,
-                            modifier = Modifier
-                                .clip(buttonShape)
-                                .clickable { selectedTab = "Schedule" }
-                                .background(if (selectedTab == "Schedule") sasiColor.blue500 else Color.Transparent)
-                                .border(
-                                    BorderStroke(
-                                        1.dp,
-                                        if (selectedTab == "Schedule") Color.Transparent else sasiColor.grey600
-                                    ),
-                                    buttonShape
+                        if (device.isTuya){
+                            if(device.tuyaInfo?.category == "ms" ){
+                                Text(
+                                    "Access",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selectedTab == "Access") sasiColor.blue50 else sasiColor.black300,
+                                    modifier = Modifier
+                                        .clip(buttonShape)
+                                        .clickable { selectedTab = "Access" }
+                                        .background(if (selectedTab == "Access") sasiColor.blue500 else Color.Transparent)
+                                        .border(
+                                            BorderStroke(
+                                                1.dp,
+                                                if (selectedTab == "Access") Color.Transparent else sasiColor.grey600
+                                            ),
+                                            buttonShape
+                                        )
+                                        .padding(horizontal = 12.dp)
                                 )
-                                .padding(horizontal = 12.dp)
-                        )
+                            }
+                        } else {
+                            Text(
+                                "Schedule",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (selectedTab == "Schedule") sasiColor.blue50 else sasiColor.black300,
+                                modifier = Modifier
+                                    .clip(buttonShape)
+                                    .clickable { selectedTab = "Schedule" }
+                                    .background(if (selectedTab == "Schedule") sasiColor.blue500 else Color.Transparent)
+                                    .border(
+                                        BorderStroke(
+                                            1.dp,
+                                            if (selectedTab == "Schedule") Color.Transparent else sasiColor.grey600
+                                        ),
+                                        buttonShape
+                                    )
+                                    .padding(horizontal = 12.dp)
+                            )
+                        }
+
                     }
                     Text(
                         "Unlink",
@@ -268,13 +306,30 @@ fun DetailDeviceDialog(
                     )
                 }
 
-                if (selectedTab == "Information") {
+                if (selectedTab == "Information" && currentDevice.isTuya == true) {
+                    if(currentDevice.tuyaInfo?.category == "ms"){
+                        SmartLockInformation(
+                            device = currentDevice,
+                            viewModel = viewModel
+                        )
+                    }
+                    if(currentDevice.tuyaInfo?.category == "mcs"){
+                        DoorSensorInformation(
+                            device = currentDevice,
+                            viewModel = viewModel
+                        )
+                    }
+                } else if (selectedTab == "Information") {
                     InformationTabContent(
                         modifier = Modifier.weight(1f),
                         device = currentDevice,
                         categories = categories,
                         viewModel = viewModel
                     )
+                }
+
+                if(selectedTab == "Access"){
+                    AccessTabContent()
                 }
             }
         }
@@ -297,7 +352,7 @@ fun ScheduleTab(
         val initialTime = scheduleMap[context.day]?.let {
             if (context.type == "On") it.On else it.Off
         } ?: "00:00"
-        
+
         // FIX: Split by '.' and handle potential parsing errors gracefully.
         val timeParts = initialTime.split('.').mapNotNull { it.toIntOrNull() }
         val initialHour = timeParts.getOrNull(0) ?: 0
@@ -609,6 +664,190 @@ fun AddNodeDialog(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SmartLockInformation(
+    device: Device,
+    viewModel: MainViewModel
+) {
+    LaunchedEffect(device.devId) {
+        viewModel.listenToSmartLockLogs(device.devId)
+    }
+
+    // 2. Ambil Data
+    val logs by viewModel.smartLockLogs.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- List History ---
+        if (logs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Belum ada riwayat akses", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(logs) { log ->
+                    SmartLockLogItem(log)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SmartLockLogItem(log: SmartLockLog) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 1. IKON (Berdasarkan Method)
+            val iconConfig = when (log.method) {
+                "CARD" -> Pair(Icons.Default.CreditCard, Color(0xFF3F51B5))
+                "FINGERPRINT" -> Pair(Icons.Default.Fingerprint, Color(0xFFE91E63))
+                "PASSWORD" -> Pair(Icons.Default.Pin, Color(0xFFFF9800))
+                "APP" -> Pair(Icons.Default.Smartphone, Color(0xFF4CAF50))
+                else -> Pair(Icons.Default.LockOpen, Color.Gray)
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(color = Color.White, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconConfig.first,
+                    contentDescription = null,
+                    tint = iconConfig.second,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // 2. DESKRIPSI & WAKTU
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = log.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AccessTime,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = log.time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AccessTabContent(){
+    Text("Access Tab Content")
+}
+
+@Composable
+fun DoorSensorInformation(
+    device: Device,
+    viewModel: MainViewModel
+) {
+    LaunchedEffect(device.devId) {
+        viewModel.listenToDoorSensorLogs(device.devId)
+    }
+
+    val logs by viewModel.doorSensorLogs.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- List History ---
+        if (logs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Belum ada riwayat akses", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(logs) { log ->
+                    DoorSensorLogItem(log)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DoorSensorLogItem(log: DoorSensorLog) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // 2. DESKRIPSI & WAKTU
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = log.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AccessTime,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = log.time,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
                 }
             }
         }

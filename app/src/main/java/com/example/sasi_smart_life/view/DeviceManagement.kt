@@ -89,6 +89,7 @@ fun DeviceManagementScreen(
 
     if (selectedDeviceForDetail != null) {
         DetailDeviceDialog(
+            device = selectedDeviceForDetail!!,
             viewModel = viewModel,
             devId = selectedDeviceForDetail!!.devId,
             categories = appState.categories,
@@ -499,21 +500,23 @@ private fun DeviceCard(
                                     overflow = TextOverflow.Ellipsis,
                                     color = textColorPrimary
                                 )
-                                Switch(
-                                    checked = device.status,
-                                    onCheckedChange = { newStatus -> onStatusChange(device.devId, newStatus) },
-                                    modifier = Modifier.size(20.dp).scale(0.7f).padding(end = 20.dp),
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = sasiColor.grey50,
-                                        uncheckedThumbColor = sasiColor.grey50,
-                                        checkedTrackColor = sasiColor.green500,
-                                        uncheckedTrackColor = sasiColor.black50,
-                                        uncheckedBorderColor = sasiColor.black50
+                                if(!device.isTuya){
+                                    Switch(
+                                        checked = device.status,
+                                        onCheckedChange = { newStatus -> onStatusChange(device.devId, newStatus) },
+                                        modifier = Modifier.size(20.dp).scale(0.7f).padding(end = 20.dp),
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = sasiColor.grey50,
+                                            uncheckedThumbColor = sasiColor.grey50,
+                                            checkedTrackColor = sasiColor.green500,
+                                            uncheckedTrackColor = sasiColor.black50,
+                                            uncheckedBorderColor = sasiColor.black50
+                                        )
                                     )
-                                )
+                                }
                             }
                              Text(
-                                 text = categoryName ?: "error",
+                                 text = categoryName ?: "Tuya Device",
                                  style = MaterialTheme.typography.bodySmall,
                                  color = textColorSecondary
                              )

@@ -130,6 +130,9 @@ class TuyaViewModel : ViewModel() {
     private val activeListeners = mutableMapOf<String, IDevListener>()
 
     private val localDeviceCache = mutableMapOf<String, MutableMap<String, Any>>()
+    private val deviceCategoryMap = mutableMapOf<String, String>()
+    private val lastHistoryTime = mutableMapOf<String, Long>()
+
 
     private fun registerListenerForDevice(devId: String) {
         if (activeListeners.containsKey(devId)) return
@@ -169,6 +172,10 @@ class TuyaViewModel : ViewModel() {
 
             val currentData = localDeviceCache.getOrPut(devId) { mutableMapOf() }
             val changes = mutableMapOf<String, Any>()
+            var category = deviceCategoryMap[devId]
+            val now = System.currentTimeMillis()
+            val dateFormat = java.text.SimpleDateFormat("dd MMM HH:mm:ss", java.util.Locale.getDefault())
+            val waktu = dateFormat.format(java.util.Date(now))
 
             val keys = json.keys()
             while (keys.hasNext()) {
@@ -178,12 +185,43 @@ class TuyaViewModel : ViewModel() {
 
                 if (newValue != oldValue) {
                     currentData[dpId] = newValue
-                    changes[dpId] = newValue
+
+                    changes["tuyaInfo/dps/$dpId"] = newValue
+
+                    when (category) {
+                        "mcs" -> { // Door Sensor
+                            if (dpId == "1") {
+                                val isOpen = newValue.toString().toBoolean()
+                                changes["status"] = if (isOpen) 0 else 1
+                                val historyMap = mapOf(
+                                    "status" to (if (isOpen) "OPEN" else "CLOSE"),
+                                    "description" to (if (isOpen) "Pintu Terbuka" else "Pintu Tertutup"),
+                                    "time" to waktu
+                                )
+                                deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
+//                                printHistory(devId, historyMap)
+                            }
+                        }
+                        "ms" -> { // Smart Lock
+                            if(dpId == "1" || dpId == "2" || dpId == "5"){
+                                val userId = newValue.toString()
+                                val historyMap = mapOf(
+                                    "status" to "OPEN",
+                                    "method" to if(dpId == "1") "FINGERPRINT" else if (dpId == "2") "PASSWORD" else  "CARD",
+                                    "description" to "Dibuka oleh ID: $newValue",
+                                    "userId" to userId,
+                                    "time" to waktu
+                                )
+                                deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
+//                                printHistory(devId,  historyMap)
+                            }
+                        }
+                    }
                 }
             }
 
             if (changes.isNotEmpty()) {
-                printCleanLog(devId, changes)
+//                printLog(devId, changes)
                 deviceRepo.updateDp(devId,changes)
             }
 
@@ -192,16 +230,26 @@ class TuyaViewModel : ViewModel() {
         }
     }
 
+    private fun printHistory(devId: String, logData: Map<String, Any>) {
+        val name = ThingHomeSdk.getDataInstance().getDeviceBean(devId)?.name ?: "Unknown"
+        Log.w(tag, """
+            
+            📜 [HISTORY PREVIEW]
+            ------------------------------------------------
+            Device      : $name ($devId)
+            Data        : $logData
+            
+        """.trimIndent())
+    }
 
-
-    private fun printCleanLog(devId: String, changes: Map<String, Any>) {
+    private fun printLog(devId: String, changes: Map<String, Any>) {
         val name = ThingHomeSdk.getDataInstance().getDeviceBean(devId)?.name ?: "Unknown"
 
         val sb = StringBuilder()
-        sb.append("\n╔════ UPDATE: $name ($devId) ════\n")
+        sb.append("\n╔════ UPDATE: $name ════\n")
 
         changes.forEach { (key, value) ->
-            sb.append(String.format("║ DP %-8s : %s\n", key, value.toString()))
+            sb.append(String.format("║ %-8s : %s\n", key, value.toString()))
         }
 
         sb.append("╚════════════════════════════════════════")
@@ -224,10 +272,11 @@ class TuyaViewModel : ViewModel() {
 
                 devices.forEach { dev ->
                     registerListenerForDevice(dev.devId)
-
-                    val dps = dev.dps
-                    if (dps != null) {
-                    }
+                    val cat = dev.productBean.category ?: "unknown"
+                    deviceCategoryMap[dev.devId] = cat
+//                    val dps = dev.dps
+//                    if (dps != null) {
+//                    }
                 }
             }
 
