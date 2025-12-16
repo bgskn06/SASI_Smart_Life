@@ -42,7 +42,6 @@ class MainViewModel(
             val user = firebaseAuth.currentUser
 
             if (user != null) {
-                // FIREBASE LOGIN SUKSES
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
                     info = "Logged in Firebase as ${user.email}. Connecting to Tuya..."
@@ -53,18 +52,15 @@ class MainViewModel(
                 tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
                     if (success) {
                         Log.d(tag, "Tuya Login Success!")
-                        // Setelah sukses login Tuya, baru load data
                         loadAllData()
                     } else {
                         Log.e(tag, "Tuya Login Failed: $error")
                         _uiState.value = _uiState.value.copy(error = "Tuya Error: $error")
                     }
                 }
-                // -----------------------------
 
             } else {
-                // LOGOUT
-                tuyaAuthRepo.logout() // Logout juga dari Tuya
+                tuyaAuthRepo.logout()
                 _uiState.value = AppState(isLoggedIn = false)
             }
         }
@@ -368,7 +364,8 @@ class MainViewModel(
                                 categoryId = nodeMap["categoryId"] as? String ?: "",
                                 x = (nodeMap["x"] as? Number)?.toFloat() ?: 0f,
                                 y = (nodeMap["y"] as? Number)?.toFloat() ?: 0f,
-                                rotation = (nodeMap["rotation"] as? Number)?.toFloat() ?: 0f
+                                rotation = (nodeMap["rotation"] as? Number)?.toFloat() ?: 0f,
+                                mirror = nodeMap["mirror"] as? Boolean ?: false
                             )
                         }
                     }
@@ -472,13 +469,14 @@ class MainViewModel(
             val formattedDeviceNumber = String.format("%03d", nextDeviceNumber)
             "dev_${roomName}_${formattedDeviceNumber}"
         }
-        // A new device always starts with a single node.
+
         val node = DeviceNode(
             id = "node_1", // Use "node_1" as the ID for the first node
             categoryId = categoryId,
-            x = 0f, // Default position
-            y = 0f,  // Default position
-            rotation = 0f
+            x = 0f,
+            y = 0f,
+            rotation = 0f,
+            mirror = false
         )
 
         val tuyaInfo = TuyaInfo(
@@ -493,15 +491,15 @@ class MainViewModel(
         val newDevice = Device(
             devId = newDeviceId,
             name = name,
-            category = categoryId, // Denormalized category for easy access
+            category = if(isTuya) null else categoryId,
             homeId = homeId,
             roomId = roomId,
-            isOnline = true, // Assume online by default
+            isOnline = true,
             isScene = false,
             status = false,
             nodes = listOf(node),
             isTuya = isTuya,
-            tuyaInfo = tuyaInfo
+            tuyaInfo = if(isTuya) tuyaInfo else null
         )
 
         deviceRepo.saveDevice(newDevice) { success, error ->
@@ -521,7 +519,7 @@ class MainViewModel(
         val newNode = DeviceNode(
             id = newNodeId,
             categoryId = categoryId,
-            x = 0f, // Default position, can be improved later
+            x = 0f,
             y = 0f
         )
 
@@ -583,6 +581,15 @@ class MainViewModel(
         }
     }
 
+    private val _userMappingState = MutableStateFlow<Map<String, String>>(emptyMap())
+    val userMappingState = _userMappingState.asStateFlow()
+
+    fun loadDeviceUsers(devId: String) {
+        deviceRepo.observeUserMapping(devId) { mapping ->
+            _userMappingState.value = mapping
+        }
+    }
+
     private val _doorSensorLogs = MutableStateFlow<List<DoorSensorLog>>(emptyList())
     val doorSensorLogs = _doorSensorLogs.asStateFlow()
 
@@ -598,6 +605,14 @@ class MainViewModel(
         }
     }
 
+    fun addDeviceUser(devId: String, userId: String, userName: String) {
+        deviceRepo.addDeviceUser(devId, userId, userName)
+    }
+
+    fun deleteDeviceUser(devId: String, userId: String) {
+        deviceRepo.deleteDeviceUser(devId, userId)
+    }
+
 
     // ----------------------------------------------------
     // DEVICE CATEGORY
@@ -608,6 +623,7 @@ class MainViewModel(
                 DeviceCategory(
                     categoryId = m["categoryId"] as? String ?: "",
                     name = m["name"] as? String ?: "",
+                    image = m["image"] as? String ?: "",
                     imageUrlOn = m["imageUrlOn"] as? String ?: "",
                     imageUrlOff = m["imageUrlOff"] as? String ?: "",
                     homeId = m["homeId"] as? String ?: ""
@@ -617,11 +633,11 @@ class MainViewModel(
         }
     }
 
-    fun createCategory(name: String, imageUrlOn: String = "", imageUrlOff: String = "") {
+    fun createCategory(name: String,image: String = "", imageUrlOn: String = "", imageUrlOff: String = "") {
         val homeId = _uiState.value.selectedHomeId?.homeId ?: return
         val categoryId = "cat_${System.currentTimeMillis()}" // Placeholder ID generation
 
-        categoryRepo.createCategory(categoryId, name, homeId, imageUrlOn, imageUrlOff) { success, error ->
+        categoryRepo.createCategory(categoryId, name, homeId, image, imageUrlOn, imageUrlOff) { success, error ->
             if (success) {
                 loadCategories(homeId)
             } else {

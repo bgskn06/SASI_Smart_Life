@@ -1,7 +1,6 @@
 package com.example.sasi_smart_life.data.repository
 
 import android.util.Log
-import com.example.sasi_smart_life.data.models.DeviceCategory
 import com.google.firebase.database.FirebaseDatabase
 
 class FBCategoryRepository {
@@ -13,6 +12,7 @@ class FBCategoryRepository {
         categoryId: String,
         name: String,
         homeId: String,
+        image: String = "",
         imageUrlOn: String = "",
         imageUrlOff: String = "",
         onComplete: (Boolean, String?) -> Unit
@@ -21,6 +21,7 @@ class FBCategoryRepository {
         val categoryData = mapOf(
             "name" to name,
             "homeId" to homeId,
+            "imgae" to image,
             "imageUrlOn" to imageUrlOn,
             "imageUrlOff" to imageUrlOff
         )

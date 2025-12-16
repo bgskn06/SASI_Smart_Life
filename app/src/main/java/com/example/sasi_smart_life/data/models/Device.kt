@@ -10,7 +10,8 @@ data class DeviceNode(
     val categoryId: String = "", // The source of truth for the node's category
     val x: Float = 0f,
     val y: Float = 0f,
-    val rotation: Float = 0f
+    val rotation: Float = 0f,
+    val mirror: Boolean = false
 )
 
 /**

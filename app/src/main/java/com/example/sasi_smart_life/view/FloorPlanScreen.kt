@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -66,7 +67,7 @@ fun FloorPlanScreen(
 
     LaunchedEffect(showLockButton, isLocked) {
         if (isLocked && showLockButton) {
-            delay(3000) // Keep button visible for 3 seconds
+            delay(3000)
             showLockButton = false
         }
     }
@@ -138,15 +139,24 @@ fun FloorPlanScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit
             )
+//  pintu barat x : 738, y : 76
+//  pintu belakang 1 x : 1650, y : 446, rotation : 90, mirror : true
+//  pintu belakang 2 x : 1650, y : 397, rotation : 90
+//  pintu depan 1 x : 313, y : 559, rotation : 270, mirror : true
+//  pintu depan 2 x : 313, y : 608, rotation : 270
+//  pintu timur 1 x : 739, y : 722, rotation : 180, mirror : true
+//  pintu timur 2 x : 788, y : 722, rotation : 180
 
             appState.devices.forEach { device ->
-                device.nodes.forEach { node ->
-                    DraggableNodeIcon(
-                        device = device,
-                        node = node,
-                        viewModel = viewModel,
-                        isLock = isLocked
-                    )
+                if (!device.category.isNullOrEmpty()) {
+                    device.nodes.forEach { node ->
+                        DraggableNodeIcon(
+                            device = device,
+                            node = node,
+                            viewModel = viewModel,
+                            isLock = isLocked
+                        )
+                    }
                 }
             }
 
@@ -233,6 +243,7 @@ private fun DraggableNodeIcon(
             .rotate(node.rotation)
     ) {
         Box {
+            val scaleX = if (node.mirror) -1f else 1f
             AsyncImage(
                 model = imageUrl,
                 placeholder = painterResource(id = R.drawable.logo_sag),
@@ -245,8 +256,9 @@ private fun DraggableNodeIcon(
                     else if(category?.name == "Lampu KMI") 148.dp
                     else if(category?.name == "Street Lamp") 108.dp
                     else if(category?.name == "Spot Lamp") 24.dp
-                    else if(category?.name == "Door Sensor") 56.dp
+                    else if(category?.name == "Door Sensor") 28.dp
                     else 36.dp)
+                    .scale(scaleX = scaleX, scaleY = 1f)
             )
             if (isBeingDragged) {
                 Text(

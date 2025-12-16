@@ -92,6 +92,7 @@ fun Header(
                 if (currentHomeId != null) {
                     viewModel.createCategory(
                         name = categoryName,
+                        image = "",
                         imageUrlOn = "",
                         imageUrlOff = "",
                     )
@@ -396,7 +397,7 @@ fun CategoryCard(
         ) {
 
             AsyncImage(
-                model = category.imageUrlOn,
+                model = category.image.ifEmpty { category.imageUrlOn },
                 placeholder = null,
                 error = painterResource(id = R.drawable.scene_empty),
                 contentDescription = category.name,

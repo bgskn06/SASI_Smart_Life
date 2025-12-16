@@ -1,16 +1,17 @@
 package com.example.sasi_smart_life.view
 
-import android.inputmethodservice.Keyboard
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,24 +26,33 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.rememberTimePickerState
@@ -60,8 +70,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.sasi_smart_life.data.models.Device
@@ -84,6 +97,7 @@ fun DetailDeviceDialog(
     categories: List<DeviceCategory>,
 ){
     val appState by viewModel.uiState.collectAsState()
+    val userMap by viewModel.userMappingState.collectAsState()
     val currentDevice = appState.devices.find { it.devId == devId }
     if (currentDevice == null) {
         Dialog(onDismissRequest = onBack) {
@@ -100,6 +114,10 @@ fun DetailDeviceDialog(
         categoryData?.imageUrlOn
     }
     val categoryName = categories.find { it.categoryId == currentDevice.category }?.name
+
+    LaunchedEffect(devId) {
+        viewModel.loadDeviceUsers(currentDevice.devId)
+    }
 
     Dialog(onDismissRequest = onBack) {
         Card(
@@ -287,15 +305,15 @@ fun DetailDeviceDialog(
                         }
 
                     }
-                    Text(
-                        "Unlink",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = sasiColor.red500,
-                        modifier = Modifier
-                            .clickable { }
-                            .padding(horizontal = 12.dp),
-                        textDecoration = TextDecoration.Underline
-                    )
+//                    Text(
+//                        "Unlink",
+//                        style = MaterialTheme.typography.bodySmall,
+//                        color = sasiColor.red500,
+//                        modifier = Modifier
+//                            .clickable { }
+//                            .padding(horizontal = 12.dp),
+//                        textDecoration = TextDecoration.Underline
+//                    )
                 }
 
                 if (selectedTab == "Schedule") {
@@ -329,7 +347,11 @@ fun DetailDeviceDialog(
                 }
 
                 if(selectedTab == "Access"){
-                    AccessTabContent()
+                    AccessTabContent(
+                        userMap = userMap,
+                        mainViewModel = viewModel,
+                        devId = currentDevice.devId,
+                    )
                 }
             }
         }
@@ -772,8 +794,249 @@ fun SmartLockLogItem(log: SmartLockLog) {
 }
 
 @Composable
-fun AccessTabContent(){
-    Text("Access Tab Content")
+fun AccessTabContent(
+    userMap: Map<String, String>,
+    mainViewModel: MainViewModel,
+    devId: String,
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showAddEditDialog by remember { mutableStateOf(false) }
+    var selectedUser by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    if (showDeleteDialog && selectedUser != null) {
+        val (userId, userName) = selectedUser!!
+
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(text = "Hapus User?") },
+            text = {
+                Text("Apakah Anda yakin ingin menghapus akses untuk '$userName' (ID: $userId)? Riwayat log tidak akan hilang, hanya nama mappingnya.")
+            },
+            containerColor = Color.White,
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mainViewModel.deleteDeviceUser(devId, userId)
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red500)
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = { showDeleteDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red50)
+                ) {
+                    Text("Batal", color = sasiColor.red500)
+                }
+            }
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (userMap.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Belum ada user terdaftar.", color = Color.Gray)
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3), // 🔥 Request Anda: 3 Kolom
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+                    .padding(vertical = 12.dp)
+            ) {
+                // Kita ubah Map jadi List agar bisa masuk ke items()
+                items(userMap.toList()) { (userId, userName) ->
+                    UserGridItem(
+                        userId = userId,
+                        userName = userName,
+                        onClick = {
+                            selectedUser = userId to userName
+                            showAddEditDialog = true
+                        },
+                        onLongClick = {
+                            selectedUser = userId to userName
+                            showDeleteDialog = true
+                        }
+                    )
+                }
+            }
+        }
+        FloatingActionButton(
+            onClick = {
+                selectedUser = null
+                showAddEditDialog = true
+            },
+            containerColor = sasiColor.blue500,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.Add,
+                contentDescription = "Tambah User",
+                tint = sasiColor.blue50)
+        }
+    }
+
+    if (showAddEditDialog) {
+        // Tentukan nilai awal: Kalau selectedUser null berarti Mode Add (kosong)
+        val initialId = selectedUser?.first ?: ""
+        val initialName = selectedUser?.second ?: ""
+
+        AddEditUserDialog(
+            initialId = initialId,
+            initialName = initialName,
+            onDismiss = { showAddEditDialog = false },
+            onSave = { newId, newName ->
+                // Panggil ViewModel untuk simpan ke Firebase
+                mainViewModel.addDeviceUser(devId, newId, newName)
+                showAddEditDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun AddEditUserDialog(
+    initialId: String = "",
+    initialName: String = "",
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var id by remember { mutableStateOf(initialId) }
+    var name by remember { mutableStateOf(initialName) }
+    val isEditMode = initialId.isNotEmpty()
+
+    AlertDialog(
+        modifier = Modifier.fillMaxWidth(0.5f),
+        onDismissRequest = onDismiss,
+        title = { Text(text = if (isEditMode) "Edit User" else "Add User") },
+        containerColor = Color.White,
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = id,
+                    onValueChange = { if (!isEditMode) id = it },
+                    label = { Text("ID User") },
+                    placeholder = { Text("ID from Smart Lock") },
+                    singleLine = true,
+                    readOnly = isEditMode,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = sasiColor.purple500,
+                        unfocusedBorderColor = sasiColor.black300,
+                        cursorColor = sasiColor.purple500,
+                        focusedLabelColor = sasiColor.black300,
+                    ),
+                )
+
+                // Input Nama
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = sasiColor.purple500,
+                        unfocusedBorderColor = sasiColor.black300,
+                        cursorColor = sasiColor.purple500,
+                        focusedLabelColor = sasiColor.black300,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (id.isNotEmpty() && name.isNotEmpty()) {
+                        onSave(id, name)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = sasiColor.purple500)
+            ) {
+                Text("Simpan", color = sasiColor.purple50)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", color = sasiColor.black500)
+            }
+        }
+    )
+}
+
+@Composable
+fun UserGridItem(
+    userId: String,
+    userName: String,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val isNamed = userName != userId && !userName.contains("Unknown", ignoreCase = true)
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (isNamed) Color(0xFFE3F2FD) else Color(0xFFEEEEEE)), // Biru vs Abu
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isNamed) Icons.Default.Person else Icons.Default.PersonOutline,
+                    contentDescription = null,
+                    tint = if (isNamed) Color(0xFF1565C0) else Color.Gray
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Center
+            ) {
+
+                Text(
+                    text = userName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 3. USER ID (Kecil)
+                Text(
+                    text = "ID: $userId",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
 }
 
 @Composable

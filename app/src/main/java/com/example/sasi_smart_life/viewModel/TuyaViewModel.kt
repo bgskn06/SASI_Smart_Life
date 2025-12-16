@@ -32,13 +32,11 @@ class TuyaViewModel : ViewModel() {
     private val pairingRepo = TuyaPairingRepository()
     private val deviceRepo = FBDeviceRepository()
 
-    private val db = FirebaseDatabase.getInstance(
-        "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
-    )
-
     val tag = "TuyaVM_SASI"
 
-    // Fungsi Add Device //
+    // ===========================
+    //          PAIRING
+    // ===========================
     private var cachedToken: String? = null
     private val _pairingState = MutableStateFlow(PairingUiState())
     val pairingState = _pairingState.asStateFlow()
@@ -125,13 +123,14 @@ class TuyaViewModel : ViewModel() {
     }
 
 
-    // Listener //
+    // ===========================
+    //          LISTENER
+    // ===========================
     private var currentListeningHomeId: Long? = null
     private val activeListeners = mutableMapOf<String, IDevListener>()
 
     private val localDeviceCache = mutableMapOf<String, MutableMap<String, Any>>()
     private val deviceCategoryMap = mutableMapOf<String, String>()
-    private val lastHistoryTime = mutableMapOf<String, Long>()
 
 
     private fun registerListenerForDevice(devId: String) {
@@ -142,14 +141,18 @@ class TuyaViewModel : ViewModel() {
         val listener = object : IDevListener {
 
             override fun onDpUpdate(devId: String, dpStr: String) {
+                Log.w(tag, "Received DP Update: $dpStr")
                 filterDp(devId, dpStr)
             }
 
             override fun onStatusChanged(devId: String, online: Boolean) {
-
+                Log.d(tag, "Status Cloud Device $devId: $online")
+                updateOnlineStatus(devId, online)
             }
 
             override fun onNetworkStatusChanged(devId: String, status: Boolean) {
+                Log.d(tag, "Status Network Device $devId: $status")
+                updateOnlineStatus(devId, status)
             }
 
             override fun onDevInfoUpdate(devId: String) {
@@ -159,6 +162,10 @@ class TuyaViewModel : ViewModel() {
                 Log.d(tag, "Device Removed: $devId")
                 activeListeners.remove(devId)
             }
+
+            private fun updateOnlineStatus(devId: String, status: Boolean){
+                deviceRepo.updateOnline(devId, status)
+            }
         }
 
         iDevice.registerDevListener(listener)
@@ -166,6 +173,7 @@ class TuyaViewModel : ViewModel() {
         activeListeners[devId] = listener
     }
 
+    private val userMappingCache = mutableMapOf<String, Map<String, String>>()
     private fun filterDp(devId: String, dpStr: String) {
         try {
             val json = JSONObject(dpStr)
@@ -183,32 +191,33 @@ class TuyaViewModel : ViewModel() {
                 val newValue = json.get(dpId)
                 val oldValue = currentData[dpId]
 
-                if (newValue != oldValue) {
-                    currentData[dpId] = newValue
+                currentData[dpId] = newValue
+                changes["tuyaInfo/dps/$dpId"] = newValue
 
-                    changes["tuyaInfo/dps/$dpId"] = newValue
-
-                    when (category) {
-                        "mcs" -> { // Door Sensor
-                            if (dpId == "1") {
-                                val isOpen = newValue.toString().toBoolean()
-                                changes["status"] = if (isOpen) 0 else 1
-                                val historyMap = mapOf(
-                                    "status" to (if (isOpen) "OPEN" else "CLOSE"),
-                                    "description" to (if (isOpen) "Pintu Terbuka" else "Pintu Tertutup"),
-                                    "time" to waktu
-                                )
-                                deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
-//                                printHistory(devId, historyMap)
-                            }
+                when (category) {
+                    "mcs" -> { // Door Sensor
+                        if (newValue != oldValue && dpId == "1") {
+                            val isOpen = newValue.toString().toBoolean()
+                            changes["status"] = if (isOpen) 0 else 1
+                            val historyMap = mapOf(
+                                "status" to (if (isOpen) "OPEN" else "CLOSE"),
+                                "description" to (if (isOpen) "Pintu Terbuka" else "Pintu Tertutup"),
+                                "time" to waktu
+                            )
+                            deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
+//                            printHistory(devId, historyMap)
                         }
-                        "ms" -> { // Smart Lock
+                    }
+                    "ms" -> { // Smart Lock
+                        if (json.length() == 1 || newValue != oldValue) {
                             if(dpId == "1" || dpId == "2" || dpId == "5"){
                                 val userId = newValue.toString()
+                                val deviceKamus = userMappingCache[devId] ?: emptyMap()
+                                val finalName = deviceKamus[userId] ?: "Unknown ID ($userId)"
                                 val historyMap = mapOf(
                                     "status" to "OPEN",
                                     "method" to if(dpId == "1") "FINGERPRINT" else if (dpId == "2") "PASSWORD" else  "CARD",
-                                    "description" to "Dibuka oleh ID: $newValue",
+                                    "description" to "Dibuka oleh $finalName",
                                     "userId" to userId,
                                     "time" to waktu
                                 )
@@ -274,6 +283,9 @@ class TuyaViewModel : ViewModel() {
                     registerListenerForDevice(dev.devId)
                     val cat = dev.productBean.category ?: "unknown"
                     deviceCategoryMap[dev.devId] = cat
+                    deviceRepo.observeUserMapping(dev.devId) { mapping ->
+                        userMappingCache[dev.devId] = mapping
+                    }
 //                    val dps = dev.dps
 //                    if (dps != null) {
 //                    }

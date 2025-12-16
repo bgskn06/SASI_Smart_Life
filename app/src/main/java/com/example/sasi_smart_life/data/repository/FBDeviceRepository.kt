@@ -191,8 +191,21 @@ class FBDeviceRepository {
         db.child("device").child(devId)
             .updateChildren(updates)
             .addOnFailureListener { e ->
-                Log.e("Firebase", "Gagal update DP $updates", e)
+                Log.e(tag, "Gagal update DP $updates", e)
             }
+    }
+
+    fun updateOnline(devId: String, status: Boolean) {
+        val statusValue = if (status) 1 else 0
+
+        val updates = mapOf(
+            "/device/$devId/isOnline" to statusValue,
+        )
+        db.updateChildren(updates)
+            .addOnFailureListener { e ->
+                Log.e(tag, "Gagal update Status", e)
+            }
+
     }
 
     fun addLogHistory(devId: String, logData: Map<String, Any>, timestampId: Long) {
@@ -203,7 +216,7 @@ class FBDeviceRepository {
             .child(logId)
             .setValue(logData)
             .addOnFailureListener {
-                Log.e("Firebase", "Gagal simpan log", it)
+                Log.e(tag, "Gagal simpan log", it)
             }
     }
 
@@ -228,7 +241,7 @@ class FBDeviceRepository {
                         )
                         logsList.add(log)
                     } catch (e: Exception) {
-                        Log.e("Repo", "Error parsing log: ${e.message}")
+                        Log.e(tag, "Error parsing log: ${e.message}")
                     }
                 }
 
@@ -244,7 +257,7 @@ class FBDeviceRepository {
 
         awaitClose {
             logsRef.removeEventListener(listener)
-            Log.d("Repo", "Listener Log dilepas untuk $devId")
+            Log.d(tag, "Listener Log dilepas untuk $devId")
         }
     }
 
@@ -266,7 +279,7 @@ class FBDeviceRepository {
                         )
                         logsList.add(log)
                     } catch (e: Exception) {
-                        Log.e("Repo", "Error parsing log: ${e.message}")
+                        Log.e(tag, "Error parsing log: ${e.message}")
                     }
                 }
 
@@ -282,7 +295,49 @@ class FBDeviceRepository {
 
         awaitClose {
             logsRef.removeEventListener(listener)
-            Log.d("Repo", "Listener Log dilepas untuk $devId")
+            Log.d(tag, "Listener Log dilepas untuk $devId")
         }
+    }
+
+    fun observeUserMapping(devId: String, onUpdate: (Map<String, String>) -> Unit) {
+        // Arahkan ke node "device_users" -> "devId"
+        val ref = db.child("device_users").child(devId)
+
+        ref.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val newMapping = mutableMapOf<String, String>()
+
+                for (child in snapshot.children) {
+                    val id = child.key ?: continue
+                    val name = child.value.toString()
+                    newMapping[id] = name
+                }
+
+                Log.d(tag, "User Mapping Updated untuk $devId: $newMapping")
+                onUpdate(newMapping)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, "Gagal load user mapping: ${error.message}")
+            }
+        })
+    }
+
+    fun addDeviceUser(devId: String, userId: String, userName: String){
+        db.child("device_users")
+            .child(devId)
+            .child(userId)
+            .setValue(userName)
+            .addOnSuccessListener { Log.d(tag, "User $userId berhasil disimpan") }
+
+    }
+
+    fun deleteDeviceUser(devId: String, userId: String) {
+        db.child("device_users")
+            .child(devId)
+            .child(userId)
+            .removeValue()
+            .addOnSuccessListener { Log.d(tag, "User $userId berhasil dihapus") }
+            .addOnFailureListener { Log.e(tag, "Gagal hapus user: ${it.message}") }
     }
 }
