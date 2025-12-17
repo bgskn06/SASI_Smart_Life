@@ -254,9 +254,12 @@ private fun DraggableNodeIcon(
                     else if(category?.name == "Leather Lamp") 52.dp
                     else if(category?.name == "Stop Kontak") 9.dp
                     else if(category?.name == "Lampu KMI") 148.dp
-                    else if(category?.name == "Street Lamp") 108.dp
+                    else if(category?.name == "Street Lamp") 128.dp
                     else if(category?.name == "Spot Lamp") 24.dp
                     else if(category?.name == "Door Sensor") 28.dp
+                    else if(category?.name == "Lampu Taman") 92.dp
+//                    else if(category?.name == "Lamp") 18.dp
+//                    else if(category?.name == "Lamp 2") 48.dp
                     else 36.dp)
                     .scale(scaleX = scaleX, scaleY = 1f)
             )

@@ -468,9 +468,12 @@ fun CategoryDetailPopup(
     category: DeviceCategory,
     devices: List<Device>,
 ) {
-    val categoryDevices = devices.filter { it.category == category.categoryId }
-    val totalCount = categoryDevices.size
-    val activeCount = categoryDevices.count { it.status }
+    val totalCount = devices.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
+    val activeCount = devices.filter { it.status }.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
     val inactiveCount = totalCount - activeCount
 
     Card(
@@ -482,7 +485,7 @@ fun CategoryDetailPopup(
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
-                    model = category.imageUrlOn,
+                    model = category.image.ifEmpty { category.imageUrlOn },
                     placeholder = null,
                     error = painterResource(id = R.drawable.scene_empty),
                     contentDescription = category.name,

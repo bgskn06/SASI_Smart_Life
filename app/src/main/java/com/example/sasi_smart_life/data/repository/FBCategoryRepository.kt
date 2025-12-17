@@ -21,7 +21,7 @@ class FBCategoryRepository {
         val categoryData = mapOf(
             "name" to name,
             "homeId" to homeId,
-            "imgae" to image,
+            "image" to image,
             "imageUrlOn" to imageUrlOn,
             "imageUrlOff" to imageUrlOff
         )

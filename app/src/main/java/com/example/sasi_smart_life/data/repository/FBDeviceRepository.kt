@@ -313,7 +313,7 @@ class FBDeviceRepository {
                     newMapping[id] = name
                 }
 
-                Log.d(tag, "User Mapping Updated untuk $devId: $newMapping")
+//                Log.d(tag, "User Mapping Updated untuk $devId: $newMapping")
                 onUpdate(newMapping)
             }
 
