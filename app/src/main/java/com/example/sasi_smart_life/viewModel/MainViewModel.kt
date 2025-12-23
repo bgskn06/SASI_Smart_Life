@@ -7,6 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.sasi_smart_life.data.models.*
 import com.example.sasi_smart_life.data.repository.*
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.ChildEventListener
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
 import com.thingclips.smart.home.sdk.ThingHomeSdk
 import com.thingclips.smart.home.sdk.bean.HomeBean
 import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
@@ -15,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import kotlin.Result.Companion.success
 
 class MainViewModel(
     private val userRepo: FBUserRepository,
@@ -33,6 +39,9 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(AppState())
     val uiState = _uiState.asStateFlow()
 
+    private val globalScenesCache = mutableListOf<SmartScene>()
+    private val globalDevicesCache = mutableListOf<Device>()
+
     val tag = "MainViewModel_SASI"
 
     private val auth = FirebaseAuth.getInstance()
@@ -41,6 +50,7 @@ class MainViewModel(
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
 
+            sceneListener()
             if (user != null) {
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
@@ -51,10 +61,10 @@ class MainViewModel(
                 val uid = user.uid
                 tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
                     if (success) {
-                        Log.d(tag, "Tuya Login Success!")
+//                        Log.d(tag, "Tuya Login Success!")
                         loadAllData()
                     } else {
-                        Log.e(tag, "Tuya Login Failed: $error")
+//                        Log.e(tag, "Tuya Login Failed: $error")
                         _uiState.value = _uiState.value.copy(error = "Tuya Error: $error")
                     }
                 }
@@ -64,15 +74,14 @@ class MainViewModel(
                 _uiState.value = AppState(isLoggedIn = false)
             }
         }
-
-        if (auth.currentUser != null) {
-            loadAllData()
-        }
     }
 
     override fun onCleared() {
         super.onCleared()
         deviceRepo.removeDevicesListener()
+        if (sceneEventListener != null) {
+            dbRef.removeEventListener(sceneEventListener!!)
+        }
     }
 
 
@@ -91,7 +100,7 @@ class MainViewModel(
     // ----------------------------------------------------
     fun loadAllData() {
         val uid = auth.currentUser?.uid ?: return
-        Log.d(tag, "UID yang digunakan untuk query: $uid")
+//        Log.d(tag, "UID yang digunakan untuk query: $uid")
 
         loadUser(uid)
         loadHomes(uid)
@@ -149,6 +158,8 @@ class MainViewModel(
                     loadHomeChildData(homes.first().homeId)
                 }
                 syncExistingHomesWithTuya(homes)
+
+                loadGlobalLogicData(homes)
             } else {
                 _uiState.value = _uiState.value.copy(error = "No homes found for this user.")
             }
@@ -161,7 +172,7 @@ class MainViewModel(
         homes.forEach { home ->
             // Cek apakah rumah ini belum punya ID Tuya (masih 0)
             if (home.tuyaHomeId == 0L) {
-                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
+//                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
 
                 // --- LANGSUNG PANGGIL SDK TUYA DI SINI ---
                 ThingHomeSdk.getHomeManagerInstance().createHome(
@@ -174,12 +185,12 @@ class MainViewModel(
                         override fun onSuccess(bean: HomeBean?) {
                             val newTuyaId = bean?.homeId
                             if (newTuyaId != null) {
-                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
+//                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
 
                                 // Update ke Firebase menggunakan Repo Home yang lama
                                 homeRepo.updateTuyaHomeId(home.homeId, newTuyaId) { success ->
                                     if (success) {
-                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
+//                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
                                         // Refresh data UI agar ID baru termuat
                                         loadHomes(uid)
                                     }
@@ -188,7 +199,7 @@ class MainViewModel(
                         }
 
                         override fun onError(errorCode: String?, errorMsg: String?) {
-                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
+//                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
                         }
                     }
                 )
@@ -223,6 +234,53 @@ class MainViewModel(
                 _uiState.value = _uiState.value.copy(info = "Home created successfully")
             } else {
                 _uiState.value = _uiState.value.copy(error = error)
+            }
+        }
+    }
+
+    private fun loadGlobalLogicData(homes: List<Home>) {
+        globalScenesCache.clear()
+        globalDevicesCache.clear() // <--- Bersihkan cache device
+
+//        Log.d(tag, "🔄 Memulai Load Global Logic untuk ${homes.size} rumah...")
+
+        homes.forEach { home ->
+            sceneRepo.getScenes(home.homeId) { list ->
+                val scenes = list.map { m ->
+                    SmartScene(
+                        sceneId = m["sceneId"].toString(),
+                        homeId = home.homeId,
+                        isActive = m["isActive"] as? Boolean ?: true,
+                        name = m["name"] as? String ?: "Unknown",
+                        ifData = (m["if"] as? Map<String, Any>) ?: emptyMap(),
+                        time = (m["time"] as? Map<String, Any>) ?: emptyMap(),
+                        thenAction = (m["then"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
+                    )
+                }
+                globalScenesCache.addAll(scenes)
+            }
+
+            deviceRepo.getDevicesByHomeListener(home.homeId) { list ->
+                val devices = list.map { m ->
+                    Device(
+                        devId = m["devId"] as? String ?: "",
+                        name = m["name"] as? String ?: "",
+                        homeId = m["homeId"] as? String ?: "",
+                        roomId = m["roomId"] as? String,
+                        category = m["category"] as? String,
+                        isOnline = true,
+                        isScene = false,
+                        status = false,
+                        nodes = emptyList(),
+                        isTuya = false,
+                        tuyaInfo = null
+                    )
+                }
+
+                globalDevicesCache.removeAll { it.homeId == home.homeId }
+                globalDevicesCache.addAll(devices)
+
+//                Log.d(tag, "✅ Global Logic: Loaded ${devices.size} devices from ${home.name}")
             }
         }
     }
@@ -299,19 +357,15 @@ class MainViewModel(
     fun deleteRoom(roomId: String) {
         val currentHomeId = _uiState.value.selectedHomeId?.homeId ?: return
 
-        // Panggil Repository
         roomRepo.deleteRoom(roomId) { success, message ->
             if (success) {
-                // 1. Jika sukses, reload daftar ruangan agar UI update
                 loadRooms(currentHomeId)
 
-                // 2. Beri notifikasi sukses ke UI State
                 _uiState.value = _uiState.value.copy(
                     info = "Ruangan berhasil dihapus",
                     error = null
                 )
             } else {
-                // 3. Jika gagal (misal masih ada device), tampilkan error dari repo
                 _uiState.value = _uiState.value.copy(
                     error = message ?: "Gagal menghapus ruangan"
                 )
@@ -405,7 +459,8 @@ class MainViewModel(
                         },
                         category = tuyaInfo["category"] as? String,
                         ip = tuyaInfo["ip"] as? String,
-                        mac = tuyaInfo["mac"] as? String
+                        mac = tuyaInfo["mac"] as? String,
+                        batt = (tuyaInfo["batt"]?.toString())?.toDoubleOrNull()?.toInt()
                     )
                 } else {
                     null
@@ -432,7 +487,8 @@ class MainViewModel(
     }
 
     fun setDeviceStatus(devId: String, roomId: String, newStatus: Boolean) {
-        deviceRepo.updateDeviceStatus(devId, roomId, newStatus) { success, error ->
+        val status = if (newStatus) 1 else 0
+        deviceRepo.updateDeviceStatus(devId, roomId, status) { success, error ->
             if (!success) {
                 _uiState.value = _uiState.value.copy(error = error)
             }
@@ -551,12 +607,12 @@ class MainViewModel(
         if (device.isTuya) {
             ThingHomeSdk.newDeviceInstance(device.devId)?.removeDevice(object : IResultCallback {
                     override fun onSuccess() {
-                        Log.d(tag, "Berhasil unbind Tuya: ${device.devId}")
+//                        Log.d(tag, "Berhasil unbind Tuya: ${device.devId}")
                         deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
                     }
 
                     override fun onError(code: String?, error: String?) {
-                        Log.e(tag, "Gagal unbind Tuya: ${device.devId} $error")
+//                        Log.e(tag, "Gagal unbind Tuya: ${device.devId} $error")
                         deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
                     }
                 }
@@ -573,7 +629,7 @@ class MainViewModel(
         viewModelScope.launch {
             deviceRepo.getSmartLockLogs(devId)
                 .catch { e ->
-                    Log.e("MainVM", "Gagal load logs: ${e.message}")
+//                    Log.e("MainVM", "Gagal load logs: ${e.message}")
                 }
                 .collect { logs ->
                     _smartLockLogs.value = logs
@@ -597,7 +653,7 @@ class MainViewModel(
         viewModelScope.launch {
             deviceRepo.getDoorSensorLogs(devId)
                 .catch { e ->
-                    Log.e("MainVM", "Gagal load logs: ${e.message}")
+//                    Log.e("MainVM", "Gagal load logs: ${e.message}")
                 }
                 .collect { logs ->
                     _doorSensorLogs.value = logs
@@ -650,45 +706,206 @@ class MainViewModel(
     // ----------------------------------------------------
     // SCENES
     // ----------------------------------------------------
+    private var sceneEventListener: ChildEventListener? = null
+    private val dbRef = FirebaseDatabase.getInstance("https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app").getReference("device")
+
     private fun loadScenes(homeId: String) {
         sceneRepo.getScenes(homeId) { list ->
-
             val scenes = list.map { m ->
                 SmartScene(
                     sceneId = m["sceneId"].toString(),
                     homeId = homeId,
-                    name = m["name"] as String,
-                    ifData = m["if"] as Map<String, Any>,
-                    thenActions = m["then"] as List<Map<String, Any>>
+                    isActive = m["isActive"] as? Boolean ?: true, // Default true jika null
+                    name = m["name"] as? String ?: "Unknown",     // Default nama jika null
+                    ifData = (m["if"] as? Map<String, Any>) ?: emptyMap(),
+                    time = (m["time"] as? Map<String, Any>) ?: emptyMap(),
+                    thenAction = (m["then"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
                 )
             }
-
             _uiState.value = _uiState.value.copy(scenes = scenes)
         }
     }
 
-    fun addScene(
-        homeId: String,
-        name: String,
-        ifData: Map<String, Any>,
-        thenActions: List<Map<String, Any>>
-    ) {
-        val sceneId = "scene_${System.currentTimeMillis()}"
-        sceneRepo.saveScene(sceneId, homeId, name, ifData, thenActions) { success, error ->
-            if (success) loadScenes(homeId)
-            else _uiState.value = _uiState.value.copy(error = error)
+    fun addScene(rawScene: SmartScene) {
+        val currentHome = _uiState.value.selectedHomeId
+
+        if (currentHome == null) {
+            _uiState.value = _uiState.value.copy(error = "No Home Selected!")
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(isLoading = true)
+
+        val finalScene = rawScene.copy(
+            homeId = currentHome.homeId
+        )
+
+        sceneRepo.addScene(finalScene) { success ->
+            if (success) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    info = "Scene berhasil dibuat!"
+                )
+                loadScenes(currentHome.homeId)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Gagal menyimpan scene."
+                )
+            }
         }
     }
 
-    fun executeScene(scene: SmartScene) {
-        scene.thenActions.forEach { action ->
-            val devId = action["devId"] as? String
-            val status = action["status"] as? Boolean
-            if (devId != null && status != null) {
-                val device = _uiState.value.devices.find { it.devId == devId }
-                if (device != null) {
-                    setDeviceStatus(devId, device.roomId ?: "", status)
+    fun deleteScene(sceneId: String) {
+        val currentHomeId = _uiState.value.selectedHomeId?.homeId ?: return
+
+        sceneRepo.deleteScene(sceneId) { success, message ->
+            if (success) {
+                loadScenes(currentHomeId)
+
+                _uiState.value = _uiState.value.copy(
+                    info = "Ruangan berhasil dihapus",
+                    error = null
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    error = message ?: "Gagal menghapus ruangan"
+                )
+            }
+        }
+    }
+
+    fun toggleSceneActive(sceneId: String, currentStatus: Boolean) {
+        val newStatus = !currentStatus
+        sceneRepo.updateSceneStatus(sceneId, newStatus) { success ->
+            if (success) {
+                val currentHomeId = _uiState.value.selectedHomeId?.homeId
+                if (currentHomeId != null) loadScenes(currentHomeId)
+
+                val sceneIndex = globalScenesCache.indexOfFirst { it.sceneId == sceneId }
+                if (sceneIndex != -1) {
+                    val updatedScene = globalScenesCache[sceneIndex].copy(isActive = newStatus)
+                    globalScenesCache[sceneIndex] = updatedScene
+//                    Log.d(tag, "Global Cache Updated: Scene ${updatedScene.name} is now ${if(newStatus) "Active" else "Inactive"}")
                 }
+            }
+        }
+    }
+
+    fun sceneListener() {
+        if (sceneEventListener != null) {
+            dbRef.removeEventListener(sceneEventListener!!)
+        }
+
+//        Log.d(tag, "Listener Scene Dipasang")
+
+        val listener = object : ChildEventListener {
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
+                val changedDevId = snapshot.key ?: return
+                val rawStatus = snapshot.child("status").value
+                val newStatus = rawStatus?.toString() ?: "0"
+
+                val triggerRoomId = snapshot.child("roomId").value.toString()
+
+//                Log.d(tag, "🔥 Perubahan -> Device: $changedDevId | Status: $newStatus")
+
+                cekScene(changedDevId, newStatus)
+            }
+
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {}
+        }
+
+        sceneEventListener = listener
+        dbRef.addChildEventListener(listener)
+    }
+
+    private fun cekWaktu(startStr: String, endStr: String): Boolean {
+        val calendar = Calendar.getInstance()
+        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = calendar.get(Calendar.MINUTE)
+
+        val currentTotalMinutes = (currentHour * 60) + currentMinute
+
+        try {
+            val startParts = startStr.split(":")
+            val startTotalMinutes = (startParts[0].toInt() * 60) + startParts[1].toInt()
+
+            val endParts = endStr.split(":")
+            val endTotalMinutes = (endParts[0].toInt() * 60) + endParts[1].toInt()
+
+            return if (startTotalMinutes < endTotalMinutes) {
+                currentTotalMinutes in startTotalMinutes..endTotalMinutes
+            } else {
+                currentTotalMinutes >= startTotalMinutes || currentTotalMinutes <= endTotalMinutes
+            }
+        } catch (e: Exception) {
+//            Log.e(tag, "Error parsing time: ${e.message}")
+            return true
+        }
+    }
+    private fun cekScene(triggerDevId: String, currentStatus: Any) {
+        val allScenes = globalScenesCache.toList()
+        val activeScenes = allScenes.filter { it.isActive }
+
+        if (activeScenes.isEmpty()) {
+//            Log.w(tag, "⚠️ Tidak ada scene aktif. Pastikan loadScenes() sudah selesai dipanggil.")
+            return
+        }
+
+        activeScenes.forEach { scene ->
+            val ifDevId = scene.ifData["devId"] as? String
+            val ifStatus = scene.ifData["status"]
+
+            if (ifDevId == triggerDevId && ifStatus.toString() == currentStatus.toString()) {
+                val timeMap = scene.time
+                val isTimeEnabled = timeMap["enabled"] as? Boolean ?: false
+
+                if (isTimeEnabled) {
+                    val startStr = timeMap["start"] as? String ?: "00:00"
+                    val endStr = timeMap["end"] as? String ?: "23:59"
+
+                    if (cekWaktu(startStr, endStr)) {
+//                        Log.d(tag, "✅ WAKTU VALID ($startStr - $endStr). Executing...")
+                        executeScene(scene)
+                    } else {
+//                        Log.w(tag, "⛔ TIME INVALID. Scene '${scene.name}' di-skip. (Range: $startStr-$endStr, Now: ${Calendar.getInstance().get(Calendar.HOUR_OF_DAY)}:${Calendar.getInstance().get(Calendar.MINUTE)})")
+                    }
+                } else {
+                    executeScene(scene)
+                }
+            }
+        }
+    }
+
+    private fun executeScene(scene: SmartScene) {
+//        Log.d(tag, "🚀 EKSEKUSI SCENE: ${scene.name}")
+
+        if (scene.thenAction.isEmpty()) {
+            return
+        }
+
+        scene.thenAction.forEach { actionMap ->
+
+            val targetDevId = actionMap["devId"] as? String
+            val targetStatus = (actionMap["status"] as? Number)?.toInt()
+
+            if (targetDevId != null && targetStatus != null) {
+                val targetDevice = globalDevicesCache.find { it.devId == targetDevId }
+                targetDevice?.roomId?.let { safeRoomId ->
+                    deviceRepo.updateDeviceStatus(targetDevId, safeRoomId, targetStatus) { success, error ->
+                        if (!success) {
+//                            Log.e(tag, "⚠️ Gagal update status scene: $error")
+                        }
+                    }
+
+                } ?: run {
+//                    Log.e(tag, "❌ Target device tidak ditemukan atau belum punya Room: $targetDevId")
+                }
+            } else {
+//                Log.e(tag, "   ❌ Data aksi corrupt (devId atau status null)")
             }
         }
     }

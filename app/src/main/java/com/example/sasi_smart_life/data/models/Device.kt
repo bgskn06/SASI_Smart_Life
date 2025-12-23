@@ -1,6 +1,5 @@
 package com.example.sasi_smart_life.data.models
 
-import com.example.sasi_smart_life.view.ScheduleData
 
 /**
  * Represents a single node of a device, with its own position and category.
@@ -29,7 +28,8 @@ data class TuyaInfo(
     val isOnline: Boolean = false,
     val category: String? = null,
     val ip: String? = null,
-    val mac: String? = null
+    val mac: String? = null,
+    val batt: Int? = null
 )
 
 data class Device(

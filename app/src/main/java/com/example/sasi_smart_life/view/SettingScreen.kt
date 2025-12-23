@@ -49,7 +49,7 @@ fun SettingScreen(
     val appState by viewModel.uiState.collectAsState()
     var showLocationDialog by remember { mutableStateOf(false) }
     var showAddLocationDialog by remember { mutableStateOf(false) }
-    var showAddSceneDialog by remember { mutableStateOf(false) } // State for the new dialog
+    var showAddSceneDialog by remember { mutableStateOf(false) }
 
     if (showLocationDialog) {
         LocationSelectionDialog(
@@ -168,9 +168,10 @@ fun SettingScreen(
                 }
                 if (selectedTab == "Smart Scene") {
                     SmartScene(
+                        categories = appState.categories,
+                        device = appState.devices,
                         viewModel = viewModel,
                         sceneList = appState.scenes,
-                        onAddSceneClick = { showAddSceneDialog = true } // Trigger the dialog
                     )
                 }
             }

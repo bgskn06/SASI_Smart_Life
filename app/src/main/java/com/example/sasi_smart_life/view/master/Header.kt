@@ -96,7 +96,7 @@ fun Header(
                         imageUrlOn = "",
                         imageUrlOff = "",
                     )
-                } // imageUrl masih kosong untuk saat ini
+                }
                 showAddCategoryDialog = false
             }
         )

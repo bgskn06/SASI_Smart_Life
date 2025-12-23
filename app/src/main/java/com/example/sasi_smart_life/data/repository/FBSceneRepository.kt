@@ -1,5 +1,7 @@
 package com.example.sasi_smart_life.data.repository
 
+import android.util.Log
+import com.example.sasi_smart_life.data.models.SmartScene
 import com.google.firebase.database.FirebaseDatabase
 
 class FBSceneRepository {
@@ -8,35 +10,31 @@ class FBSceneRepository {
         "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
     ).reference
 
+    val tag = "SceneRepo_SASI"
 
-    // ------------------------------------------------------------------
-    // SAVE SCENE
-    // ------------------------------------------------------------------
-    fun saveScene(
-        sceneId: String,
-        homeId: String,
-        name: String,
-        ifData: Map<String, Any>,
-        thenActions: List<Map<String, Any>>,
-        onComplete: (Boolean, String?) -> Unit
-    ) {
-        val data = mapOf(
-            "homeId" to homeId,
-            "name" to name,
-            "if" to ifData,
-            "then" to thenActions
+    fun addScene(scene: SmartScene, onComplete: (Boolean) -> Unit) {
+        val path = "scenes/${scene.sceneId}"
+
+        val sceneMap = mapOf(
+            "sceneId" to scene.sceneId,
+            "homeId" to scene.homeId,
+            "name" to scene.name,
+            "isActive" to scene.isActive,
+            "if" to scene.ifData,
+            "time" to scene.time,
+            "then" to scene.thenAction
         )
 
-        db.child("scenes").child(sceneId)
-            .setValue(data)
-            .addOnSuccessListener { onComplete(true, null) }
-            .addOnFailureListener { e -> onComplete(false, e.message) }
+        db.child(path).setValue(sceneMap)
+            .addOnSuccessListener {
+                onComplete(true)
+            }
+            .addOnFailureListener { e ->
+                e.printStackTrace()
+                onComplete(false)
+            }
     }
 
-
-    // ------------------------------------------------------------------
-    // GET SCENES BY HOME ID
-    // ------------------------------------------------------------------
     fun getScenes(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {
         db.child("scenes").get().addOnSuccessListener { snapshot ->
             if (!snapshot.exists()) {
@@ -61,4 +59,29 @@ class FBSceneRepository {
         }
     }
 
+    fun updateSceneStatus(sceneId: String, newStatus: Boolean, onComplete: (Boolean) -> Unit){
+        val path = "scenes/$sceneId/isActive"
+
+        db.child(path).setValue(newStatus)
+            .addOnSuccessListener {
+                onComplete(true)
+            }
+            .addOnFailureListener { e ->
+                e.printStackTrace()
+                onComplete(false)
+            }
+    }
+
+    fun deleteScene(sceneId: String, onComplete: (Boolean, String?) -> Unit) {
+        val path = "scenes/$sceneId"
+
+        db.child(path).removeValue()
+            .addOnSuccessListener {
+                onComplete(true, null)
+            }
+            .addOnFailureListener { e ->
+                e.printStackTrace()
+                onComplete(false, e.message)
+            }
+    }
 }

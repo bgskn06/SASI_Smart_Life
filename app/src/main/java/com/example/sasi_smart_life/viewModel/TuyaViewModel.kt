@@ -207,6 +207,10 @@ class TuyaViewModel : ViewModel() {
                             deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
 //                            printHistory(devId, historyMap)
                         }
+                        if (newValue != oldValue && dpId == "2") {
+                            val battLevel = newValue.toString().toDoubleOrNull()?.toInt() ?: 0
+                            changes["tuyaInfo/batt"] = battLevel
+                        }
                     }
                     "ms" -> { // Smart Lock
                         if (json.length() == 1 || newValue != oldValue) {

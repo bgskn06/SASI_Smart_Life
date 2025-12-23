@@ -117,11 +117,10 @@ class FBDeviceRepository {
         })
     }
 
-    fun updateDeviceStatus(devId: String, roomId: String, newStatus: Boolean, onComplete: (Boolean, String?) -> Unit) {
-        val statusValue = if (newStatus) 1 else 0
+    fun updateDeviceStatus(devId: String, roomId: String, newStatus: Int, onComplete: (Boolean, String?) -> Unit) {
         val updates = mapOf(
-            "/device/$devId/status" to statusValue,
-            "/status/$roomId/device/$devId" to statusValue
+            "/device/$devId/status" to newStatus,
+            "/status/$roomId/device/$devId" to newStatus
         )
         db.updateChildren(updates)
             .addOnSuccessListener { onComplete(true, null) }

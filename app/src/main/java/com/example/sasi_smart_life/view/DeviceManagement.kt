@@ -25,8 +25,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Battery0Bar
+import androidx.compose.material.icons.filled.Battery1Bar
+import androidx.compose.material.icons.filled.Battery2Bar
+import androidx.compose.material.icons.filled.Battery3Bar
+import androidx.compose.material.icons.filled.Battery4Bar
+import androidx.compose.material.icons.filled.Battery5Bar
+import androidx.compose.material.icons.filled.Battery6Bar
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Home
@@ -68,6 +78,7 @@ import com.example.sasi_smart_life.data.models.DeviceCategory
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.TuyaViewModel
+import kotlin.text.ifEmpty
 
 @Composable
 fun DeviceManagementScreen(
@@ -154,6 +165,7 @@ fun DeviceManagementScreen(
     if (deviceToDelete != null) {
         AlertDialog(
             onDismissRequest = { deviceToDelete = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = sasiColor.red500) },
             title = { Text("Hapus Perangkat?") },
             text = {
                 Text(
@@ -432,7 +444,7 @@ private fun DeviceCard(
     val finalImageUrl = if (device.isTuya && !device.tuyaInfo?.iconUrl.isNullOrEmpty()) {
         device.tuyaInfo.iconUrl
     } else {
-        categoryData?.imageUrlOn
+        categoryData?.image?.ifEmpty { categoryData?.imageUrlOn }
     }
     val categoryName = categories.find { it.categoryId == device.category }?.name
     val bg = if (device.status) sasiColor.purple300 else sasiColor.grey50
@@ -547,15 +559,59 @@ private fun DeviceCard(
                                 color = textColorSecondary
                             )
                         }
-                        Text(
-                            "Scheduled", style = MaterialTheme.typography.labelSmall, color = sasiColor.purple50,
-                            modifier = Modifier
-                                .background(sasiColor.purple500, shape = RoundedCornerShape(50))
-                                .padding(vertical = 2.dp, horizontal = 4.dp)
-                        )
+                        if (device.isTuya && device.tuyaInfo?.category == "mcs"){
+                            val batt = device.tuyaInfo?.batt ?: 0
+                            val warna = if (device.status) sasiColor.grey300 else sasiColor.black100
+                            val battIcon = when {
+                                batt >= 90 -> Icons.Default.BatteryStd
+                                batt >= 80 -> Icons.Default.Battery6Bar
+                                batt >= 70 -> Icons.Default.Battery5Bar
+                                batt >= 60 -> Icons.Default.Battery4Bar
+                                batt >= 45 -> Icons.Default.Battery3Bar
+                                batt >= 30 -> Icons.Default.Battery2Bar
+                                batt >= 10 -> Icons.Default.Battery1Bar
+                                else -> Icons.Default.Battery0Bar
+                            }
+                            Row (
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = battIcon,
+                                    contentDescription = null,
+                                    tint = warna,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text("$batt%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = warna
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+// Helper sakti untuk mengambil value Tuya tanpa pusing tipe datanya
+fun Any?.getTuyaDp(dpid: Int): Any? {
+    val rawData = this ?: return null
+
+    return when (rawData) {
+        // Jika Firebase mengirimnya sebagai MAP (Object)
+        is Map<*, *> -> {
+            // Coba ambil pakai key String ("1") atau Int (1)
+            rawData[dpid.toString()] ?: rawData[dpid]
+        }
+
+        // Jika Firebase mengirimnya sebagai LIST (Array)
+        is List<*> -> {
+            // Ambil berdasarkan index (karena index array = DPID di Firebase)
+            rawData.getOrNull(dpid)
+        }
+
+        // Format tidak dikenali
+        else -> null
     }
 }
