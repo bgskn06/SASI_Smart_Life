@@ -39,9 +39,6 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(AppState())
     val uiState = _uiState.asStateFlow()
 
-    private val globalScenesCache = mutableListOf<SmartScene>()
-    private val globalDevicesCache = mutableListOf<Device>()
-
     val tag = "MainViewModel_SASI"
 
     private val auth = FirebaseAuth.getInstance()
@@ -50,7 +47,6 @@ class MainViewModel(
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
 
-            sceneListener()
             if (user != null) {
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
@@ -100,8 +96,6 @@ class MainViewModel(
     // ----------------------------------------------------
     fun loadAllData() {
         val uid = auth.currentUser?.uid ?: return
-//        Log.d(tag, "UID yang digunakan untuk query: $uid")
-
         loadUser(uid)
         loadHomes(uid)
     }
@@ -159,7 +153,6 @@ class MainViewModel(
                 }
                 syncExistingHomesWithTuya(homes)
 
-                loadGlobalLogicData(homes)
             } else {
                 _uiState.value = _uiState.value.copy(error = "No homes found for this user.")
             }
@@ -234,53 +227,6 @@ class MainViewModel(
                 _uiState.value = _uiState.value.copy(info = "Home created successfully")
             } else {
                 _uiState.value = _uiState.value.copy(error = error)
-            }
-        }
-    }
-
-    private fun loadGlobalLogicData(homes: List<Home>) {
-        globalScenesCache.clear()
-        globalDevicesCache.clear() // <--- Bersihkan cache device
-
-//        Log.d(tag, "🔄 Memulai Load Global Logic untuk ${homes.size} rumah...")
-
-        homes.forEach { home ->
-            sceneRepo.getScenes(home.homeId) { list ->
-                val scenes = list.map { m ->
-                    SmartScene(
-                        sceneId = m["sceneId"].toString(),
-                        homeId = home.homeId,
-                        isActive = m["isActive"] as? Boolean ?: true,
-                        name = m["name"] as? String ?: "Unknown",
-                        ifData = (m["if"] as? Map<String, Any>) ?: emptyMap(),
-                        time = (m["time"] as? Map<String, Any>) ?: emptyMap(),
-                        thenAction = (m["then"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
-                    )
-                }
-                globalScenesCache.addAll(scenes)
-            }
-
-            deviceRepo.getDevicesByHomeListener(home.homeId) { list ->
-                val devices = list.map { m ->
-                    Device(
-                        devId = m["devId"] as? String ?: "",
-                        name = m["name"] as? String ?: "",
-                        homeId = m["homeId"] as? String ?: "",
-                        roomId = m["roomId"] as? String,
-                        category = m["category"] as? String,
-                        isOnline = true,
-                        isScene = false,
-                        status = false,
-                        nodes = emptyList(),
-                        isTuya = false,
-                        tuyaInfo = null
-                    )
-                }
-
-                globalDevicesCache.removeAll { it.homeId == home.homeId }
-                globalDevicesCache.addAll(devices)
-
-//                Log.d(tag, "✅ Global Logic: Loaded ${devices.size} devices from ${home.name}")
             }
         }
     }
@@ -429,7 +375,7 @@ class MainViewModel(
                     val fallbackY = (m["y"] as? Number)?.toFloat() ?: 0f
                     finalDeviceNodes = listOf(
                         DeviceNode(
-                            id = "node_1", // Default ID for migrated data
+                            id = "node_1",
                             categoryId = fallbackCategoryId,
                             x = fallbackX,
                             y = fallbackY
@@ -527,7 +473,7 @@ class MainViewModel(
         }
 
         val node = DeviceNode(
-            id = "node_1", // Use "node_1" as the ID for the first node
+            id = "node_1",
             categoryId = categoryId,
             x = 0f,
             y = 0f,
@@ -565,6 +511,10 @@ class MainViewModel(
                 _uiState.value = _uiState.value.copy(error = error)
             }
         }
+    }
+
+    fun updateDevice(name: String, devId: String, categoryId: String) {
+        deviceRepo.updateDeviceInformation(name, devId, categoryId)
     }
 
     fun addNodeToDevice(devId: String, categoryId: String) {
@@ -715,11 +665,28 @@ class MainViewModel(
                 SmartScene(
                     sceneId = m["sceneId"].toString(),
                     homeId = homeId,
-                    isActive = m["isActive"] as? Boolean ?: true, // Default true jika null
-                    name = m["name"] as? String ?: "Unknown",     // Default nama jika null
-                    ifData = (m["if"] as? Map<String, Any>) ?: emptyMap(),
-                    time = (m["time"] as? Map<String, Any>) ?: emptyMap(),
-                    thenAction = (m["then"] as? List<*>)?.filterIsInstance<Map<String, Any>>() ?: emptyList()
+                    isActive = m["isActive"] as? Boolean ?: true,
+                    name = m["name"] as? String ?: "Unknown",
+                    ifData = SceneCondition(
+                        devId = (m["if"] as? Map<*, *>)?.get("devId") as? String ?: "",
+                        operator = (m["if"] as? Map<*, *>)?.get("operator") as? String
+                            ?: "==",
+                        status = ((m["if"] as? Map<*, *>)?.get("status") as? Number)?.toInt()
+                            ?: 0
+                    ),
+                    schedule = SceneSchedule(
+                        enabled = (m["schedule"] as? Map<*, *>)?.get("enabled") as? Boolean
+                            ?: false,
+                        startTime = (m["schedule"] as? Map<*, *>)?.get("startTime") as? String
+                            ?: "00:00",
+                        endTime = (m["schedule"] as? Map<*, *>)?.get("endTime") as? String
+                            ?: "23:59",
+                        days = (m["schedule"] as? Map<*, *>)?.get("days") as? Map<String, Boolean>
+                            ?: emptyMap()
+                    ),
+                    thenAction = (m["then"] as? List<Map<String, Any>>)?.map {
+                        SceneAction(it["devId"] as String, (it["status"] as Number).toInt())
+                    } ?: emptyList()
                 )
             }
             _uiState.value = _uiState.value.copy(scenes = scenes)
@@ -782,130 +749,6 @@ class MainViewModel(
                 val currentHomeId = _uiState.value.selectedHomeId?.homeId
                 if (currentHomeId != null) loadScenes(currentHomeId)
 
-                val sceneIndex = globalScenesCache.indexOfFirst { it.sceneId == sceneId }
-                if (sceneIndex != -1) {
-                    val updatedScene = globalScenesCache[sceneIndex].copy(isActive = newStatus)
-                    globalScenesCache[sceneIndex] = updatedScene
-//                    Log.d(tag, "Global Cache Updated: Scene ${updatedScene.name} is now ${if(newStatus) "Active" else "Inactive"}")
-                }
-            }
-        }
-    }
-
-    fun sceneListener() {
-        if (sceneEventListener != null) {
-            dbRef.removeEventListener(sceneEventListener!!)
-        }
-
-//        Log.d(tag, "Listener Scene Dipasang")
-
-        val listener = object : ChildEventListener {
-            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                val changedDevId = snapshot.key ?: return
-                val rawStatus = snapshot.child("status").value
-                val newStatus = rawStatus?.toString() ?: "0"
-
-                val triggerRoomId = snapshot.child("roomId").value.toString()
-
-//                Log.d(tag, "🔥 Perubahan -> Device: $changedDevId | Status: $newStatus")
-
-                cekScene(changedDevId, newStatus)
-            }
-
-            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {}
-            override fun onChildRemoved(snapshot: DataSnapshot) {}
-            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-            override fun onCancelled(error: DatabaseError) {}
-        }
-
-        sceneEventListener = listener
-        dbRef.addChildEventListener(listener)
-    }
-
-    private fun cekWaktu(startStr: String, endStr: String): Boolean {
-        val calendar = Calendar.getInstance()
-        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
-        val currentMinute = calendar.get(Calendar.MINUTE)
-
-        val currentTotalMinutes = (currentHour * 60) + currentMinute
-
-        try {
-            val startParts = startStr.split(":")
-            val startTotalMinutes = (startParts[0].toInt() * 60) + startParts[1].toInt()
-
-            val endParts = endStr.split(":")
-            val endTotalMinutes = (endParts[0].toInt() * 60) + endParts[1].toInt()
-
-            return if (startTotalMinutes < endTotalMinutes) {
-                currentTotalMinutes in startTotalMinutes..endTotalMinutes
-            } else {
-                currentTotalMinutes >= startTotalMinutes || currentTotalMinutes <= endTotalMinutes
-            }
-        } catch (e: Exception) {
-//            Log.e(tag, "Error parsing time: ${e.message}")
-            return true
-        }
-    }
-    private fun cekScene(triggerDevId: String, currentStatus: Any) {
-        val allScenes = globalScenesCache.toList()
-        val activeScenes = allScenes.filter { it.isActive }
-
-        if (activeScenes.isEmpty()) {
-//            Log.w(tag, "⚠️ Tidak ada scene aktif. Pastikan loadScenes() sudah selesai dipanggil.")
-            return
-        }
-
-        activeScenes.forEach { scene ->
-            val ifDevId = scene.ifData["devId"] as? String
-            val ifStatus = scene.ifData["status"]
-
-            if (ifDevId == triggerDevId && ifStatus.toString() == currentStatus.toString()) {
-                val timeMap = scene.time
-                val isTimeEnabled = timeMap["enabled"] as? Boolean ?: false
-
-                if (isTimeEnabled) {
-                    val startStr = timeMap["start"] as? String ?: "00:00"
-                    val endStr = timeMap["end"] as? String ?: "23:59"
-
-                    if (cekWaktu(startStr, endStr)) {
-//                        Log.d(tag, "✅ WAKTU VALID ($startStr - $endStr). Executing...")
-                        executeScene(scene)
-                    } else {
-//                        Log.w(tag, "⛔ TIME INVALID. Scene '${scene.name}' di-skip. (Range: $startStr-$endStr, Now: ${Calendar.getInstance().get(Calendar.HOUR_OF_DAY)}:${Calendar.getInstance().get(Calendar.MINUTE)})")
-                    }
-                } else {
-                    executeScene(scene)
-                }
-            }
-        }
-    }
-
-    private fun executeScene(scene: SmartScene) {
-//        Log.d(tag, "🚀 EKSEKUSI SCENE: ${scene.name}")
-
-        if (scene.thenAction.isEmpty()) {
-            return
-        }
-
-        scene.thenAction.forEach { actionMap ->
-
-            val targetDevId = actionMap["devId"] as? String
-            val targetStatus = (actionMap["status"] as? Number)?.toInt()
-
-            if (targetDevId != null && targetStatus != null) {
-                val targetDevice = globalDevicesCache.find { it.devId == targetDevId }
-                targetDevice?.roomId?.let { safeRoomId ->
-                    deviceRepo.updateDeviceStatus(targetDevId, safeRoomId, targetStatus) { success, error ->
-                        if (!success) {
-//                            Log.e(tag, "⚠️ Gagal update status scene: $error")
-                        }
-                    }
-
-                } ?: run {
-//                    Log.e(tag, "❌ Target device tidak ditemukan atau belum punya Room: $targetDevId")
-                }
-            } else {
-//                Log.e(tag, "   ❌ Data aksi corrupt (devId atau status null)")
             }
         }
     }

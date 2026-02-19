@@ -15,17 +15,7 @@ class FBSceneRepository {
     fun addScene(scene: SmartScene, onComplete: (Boolean) -> Unit) {
         val path = "scenes/${scene.sceneId}"
 
-        val sceneMap = mapOf(
-            "sceneId" to scene.sceneId,
-            "homeId" to scene.homeId,
-            "name" to scene.name,
-            "isActive" to scene.isActive,
-            "if" to scene.ifData,
-            "time" to scene.time,
-            "then" to scene.thenAction
-        )
-
-        db.child(path).setValue(sceneMap)
+        db.child(path).setValue(scene)
             .addOnSuccessListener {
                 onComplete(true)
             }

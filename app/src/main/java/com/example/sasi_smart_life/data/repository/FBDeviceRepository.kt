@@ -23,7 +23,7 @@ class FBDeviceRepository {
         "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
     ).reference
 
-    private var devicesListener: ValueEventListener? = null
+    private val deviceListenersMap = mutableMapOf<String, ValueEventListener>()
 
     val tag = "DEVICE_SASI"
 
@@ -138,42 +138,35 @@ class FBDeviceRepository {
     }
 
     fun getDevicesByHomeListener(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {
-        devicesListener = db.child("device").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) {
-                    onComplete(emptyList())
-                    return
-                }
+        if (deviceListenersMap.containsKey(homeId)) return
 
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 val allDevices = snapshot.children.mapNotNull { childSnapshot ->
                     val deviceData = childSnapshot.value as? MutableMap<String, Any>
                     deviceData?.set("devId", childSnapshot.key ?: "")
                     deviceData
                 }
-
-                val filteredList = allDevices.filter { device ->
-                    val idFromData = device["homeId"] as? String
-                    idFromData == homeId
-                }
-
+                val filteredList = allDevices.filter { it["homeId"] == homeId }
                 onComplete(filteredList)
             }
+            override fun onCancelled(error: DatabaseError) { Log.e(tag, error.message) }
+        }
 
-            override fun onCancelled(error: DatabaseError) {
-                onComplete(emptyList())
-            }
-        })
+        // Simpan ke Map berdasarkan homeId
+        deviceListenersMap[homeId] = listener
+        db.child("device").addValueEventListener(listener)
     }
 
     fun removeDevicesListener() {
-        devicesListener?.let {
-            db.child("device").removeEventListener(it)
+        deviceListenersMap.forEach { (homeId, listener) ->
+            db.child("device").removeEventListener(listener)
         }
+        deviceListenersMap.clear()
     }
 
     fun deleteDevice(devId: String, onComplete: (Boolean, String?) -> Unit) {
 
-        // Path harus sama persis dengan saveDevice: db.child("device").child(devId)
         db.child("device").child(devId)
             .removeValue()
             .addOnSuccessListener {
@@ -184,6 +177,14 @@ class FBDeviceRepository {
                 Log.e(tag, "Gagal hapus device $devId", e)
                 onComplete(false, e.message)
             }
+    }
+
+    fun updateDeviceInformation(devId: String, name: String, categoryId: String){
+        val updates = mapOf(
+            "/device/$devId/name" to name,
+            "/device/$devId/nodes/node_1/categoryId" to categoryId
+        )
+        db.updateChildren(updates)
     }
 
     fun updateDp(devId: String, updates: Map<String, Any>){
@@ -299,7 +300,6 @@ class FBDeviceRepository {
     }
 
     fun observeUserMapping(devId: String, onUpdate: (Map<String, String>) -> Unit) {
-        // Arahkan ke node "device_users" -> "devId"
         val ref = db.child("device_users").child(devId)
 
         ref.addValueEventListener(object : ValueEventListener {
@@ -312,7 +312,6 @@ class FBDeviceRepository {
                     newMapping[id] = name
                 }
 
-//                Log.d(tag, "User Mapping Updated untuk $devId: $newMapping")
                 onUpdate(newMapping)
             }
 

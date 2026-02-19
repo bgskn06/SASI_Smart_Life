@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
@@ -71,6 +72,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +82,8 @@ import coil.compose.AsyncImage
 import com.example.sasi_smart_life.R
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceCategory
+import com.example.sasi_smart_life.data.models.SceneCondition
+import com.example.sasi_smart_life.data.models.SceneSchedule
 import com.example.sasi_smart_life.data.models.SmartScene
 import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
@@ -107,9 +111,7 @@ fun SmartScene(
             category = categories,
             onDismiss = { showDialog = false },
             onSave = { newScene ->
-                // 1. Panggil ViewModel untuk kirim ke Firebase
                 viewModel.addScene(newScene)
-                // 2. Setelah selesai, tutup dialog
                 showDialog = false
             }
         )
@@ -282,9 +284,9 @@ fun SceneCard(
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
 
-                val isTimeEnabled = scene.time["enabled"] as? Boolean ?: false
-                val start = scene.time["start"] as? String ?: ""
-                val end = scene.time["end"] as? String ?: ""
+                val isTimeEnabled = scene.schedule as? Boolean ?: false
+                val start = scene.schedule.startTime as? String ?: ""
+                val end = scene.schedule.endTime as? String ?: ""
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -309,13 +311,13 @@ fun SceneCard(
                 }
 
                 // IF TRIGGER
-                val ifDevId = scene.ifData["devId"] as? String
-                val ifStatus = scene.ifData["status"].toString()
+                val ifDevId = scene.ifData.devId as? String
+                val ifStatus = scene.ifData.status.toString()
                 val ifStateText = if (ifStatus == "1" || ifStatus == "true") "ON" else "OFF"
 
                 val firstAction = scene.thenAction.firstOrNull()
-                val thenDevId = firstAction?.get("devId") as? String
-                val thenStatus = firstAction?.get("status").toString()
+                val thenDevId = firstAction?.devId as? String
+                val thenStatus = firstAction?.status.toString()
                 val thenStateText = if (thenStatus == "1" || thenStatus == "true") "ON" else "OFF"
 
                 Row(
@@ -428,6 +430,9 @@ fun AddScene(
     var thenDevice by remember { mutableStateOf<Device?>(null) }
     var thenStatus by remember { mutableStateOf(1) }
 
+    var ifOperator by remember { mutableStateOf("==") }
+    var ifValueThreshold by remember { mutableStateOf("25") } // Default untuk suhu
+
     val statusOptions = listOf(
         StatusOption("ON", 1),
         StatusOption("OFF", 0)
@@ -441,7 +446,6 @@ fun AddScene(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.CenterEnd // POSISI KANAN
         ) {
-            // Background Dim (klik luar untuk tutup)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -479,9 +483,9 @@ fun AddScene(
 
                     Column(
                         modifier = Modifier
-                            .weight(1f) // KUNCI: Ambil semua ruang sisa
+                            .weight(1f)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp) // Sedikit diperlega agar rapi
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
 
                         OutlinedTextField(
@@ -511,11 +515,40 @@ fun AddScene(
                                     onSelect = { ifDevice = it }
                                 )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
                             Box(modifier = Modifier.weight(0.3f)) {
-                                StatusDropdown(
-                                    selectedValue = ifStatus,
-                                    onSelect = { ifStatus = it }
-                                )
+                                if (ifDevice != null) {
+                                    val cat = category.find { it.categoryId == ifDevice?.category }
+
+                                    // CEK: Apakah ini sensor suhu?
+                                    if (cat?.name?.lowercase()?.contains("suhu") == true || ifDevice?.category == "sensor_suhu") {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            // Dropdown Operator (>, <, ==)
+                                            Box(modifier = Modifier.weight(0.4f)) {
+                                                OperatorDropdown(ifOperator) { ifOperator = it }
+                                            }
+                                            // Input Angka Suhu
+                                            OutlinedTextField(
+                                                value = ifValueThreshold,
+                                                onValueChange = { if (it.all { char -> char.isDigit() }) ifValueThreshold = it },
+                                                label = { Text("Value") },
+                                                modifier = Modifier.weight(0.6f),
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                suffix = { Text("°C") }
+                                            )
+                                        }
+                                    } else {
+                                        // Jika saklar atau pintu, tampilkan Dropdown ON/OFF biasa
+                                        StatusDropdown(
+                                            label = if (ifDevice?.category == "sensor_pintu") "Pintu" else "Status",
+                                            selectedValue = ifStatus,
+                                            options = if (ifDevice?.category == "sensor_pintu")
+                                                listOf("TERBUKA" to 1, "TERTUTUP" to 0)
+                                            else listOf("ON" to 1, "OFF" to 0),
+                                            onSelect = { ifStatus = it }
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -565,6 +598,33 @@ fun AddScene(
                             }
                         }
 
+                        var selectedDays by remember { mutableStateOf(setOf(1, 2, 3, 4, 5, 6, 7)) } // 1=Mon, 7=Sun
+
+                        SectionLabel("REPEAT DAYS")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
+                            dayLabels.forEachIndexed { index, label ->
+                                val dayNum = index + 1
+                                val isSelected = selectedDays.contains(dayNum)
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(35.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSelected) sasiColor.purple500 else Color.LightGray)
+                                        .clickable {
+                                            selectedDays = if (isSelected) selectedDays - dayNum else selectedDays + dayNum
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
                         // --- 4. THEN SECTION ---
                         SectionLabel("THEN (Action)")
 
@@ -579,12 +639,40 @@ fun AddScene(
                                     onSelect = { thenDevice = it }
                                 )
                             }
-                            // Pilih Status (Lebar 30%)
+                            Spacer(modifier = Modifier.height(8.dp))
                             Box(modifier = Modifier.weight(0.3f)) {
-                                StatusDropdown(
-                                    selectedValue = thenStatus,
-                                    onSelect = { thenStatus = it }
-                                )
+                                if (thenDevice != null) {
+                                    val cat = category.find { it.categoryId == ifDevice?.category }
+
+                                    // CEK: Apakah ini sensor suhu?
+                                    if (cat?.name?.lowercase()?.contains("suhu") == true || ifDevice?.category == "sensor_suhu") {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            // Dropdown Operator (>, <, ==)
+                                            Box(modifier = Modifier.weight(0.4f)) {
+                                                OperatorDropdown(ifOperator) { ifOperator = it }
+                                            }
+                                            // Input Angka Suhu
+                                            OutlinedTextField(
+                                                value = ifValueThreshold,
+                                                onValueChange = { if (it.all { char -> char.isDigit() }) ifValueThreshold = it },
+                                                label = { Text("Value") },
+                                                modifier = Modifier.weight(0.6f),
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                suffix = { Text("°C") }
+                                            )
+                                        }
+                                    } else {
+                                        // Jika saklar atau pintu, tampilkan Dropdown ON/OFF biasa
+                                        StatusDropdown(
+                                            label = if (ifDevice?.category == "sensor_pintu") "Pintu" else "Status",
+                                            selectedValue = ifStatus,
+                                            options = if (ifDevice?.category == "sensor_pintu")
+                                                listOf("TERBUKA" to 1, "TERTUTUP" to 0)
+                                            else listOf("ON" to 1, "OFF" to 0),
+                                            onSelect = { ifStatus = it }
+                                        )
+                                    }
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -595,25 +683,21 @@ fun AddScene(
                     Button(
                         onClick = {
                             if (ifDevice != null && thenDevice != null) {
+                                val isSuhu = ifDevice?.category?.contains("suhu") == true
                                 val newScene = SmartScene(
                                     sceneId = System.currentTimeMillis().toString(),
                                     name = sceneName,
                                     isActive = true,
-                                    ifData = mapOf(
-                                        "devId" to ifDevice!!.devId,
-                                        "status" to ifStatus
+                                    ifData = SceneCondition(
+                                        devId = ifDevice!!.devId,
+                                        operator = if (isSuhu) ifOperator else "==",
+                                        status = if (isSuhu) ifValueThreshold.toInt() else ifStatus
                                     ),
-                                    time = if (isTimeEnabled) mapOf(
-                                        "start" to startTime,
-                                        "end" to endTime,
-                                        "enabled" to true
-                                    ) else emptyMap(),
-                                    thenAction = listOf(
-                                        mapOf(
-                                            "devId" to thenDevice!!.devId,
-                                            "status" to thenStatus
-                                        )
-                                    )
+                                    schedule = SceneSchedule(
+                                        enabled = isTimeEnabled,
+                                        startTime = startTime,
+                                        endTime = endTime
+                                    ),
                                 )
                                 onSave(newScene)
                             }
@@ -641,6 +725,53 @@ fun SectionLabel(text: String) {
         color = Color.Gray,
         modifier = Modifier.padding(top = 8.dp)
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OperatorDropdown(
+    selectedOp: String,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val operators = listOf(
+        ">" to "Besar dari",
+        "<" to "Kecil dari",
+        "==" to "Sama dengan"
+    )
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedOp,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Kondisi") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = sasiColor.purple500,
+                unfocusedBorderColor = sasiColor.black300
+            )
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = Color.White
+        ) {
+            operators.forEach { (op, desc) ->
+                DropdownMenuItem(
+                    text = { Text("$op ($desc)") },
+                    onClick = {
+                        onSelect(op)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -724,41 +855,38 @@ fun DeviceDropdown(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatusDropdown(
+    label: String,
     selectedValue: Int,
+    options: List<Pair<String, Int>>,
     onSelect: (Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val options = listOf("OFF" to 0, "ON" to 1)
+    val currentLabel = options.find { it.second == selectedValue }?.first ?: "Pilih"
 
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = if(selectedValue == 1) "ON" else "OFF",
+            value = currentLabel,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Status") },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = sasiColor.purple500,
-                unfocusedBorderColor = sasiColor.black300,
-                cursorColor = sasiColor.purple500,
-                focusedLabelColor = sasiColor.black300,
+                unfocusedBorderColor = sasiColor.black300
             )
         )
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            containerColor = sasiColor.grey300,
-            border = BorderStroke(1.dp, sasiColor.purple500),
+            containerColor = Color.White
         ) {
-            options.forEach { (label, value) ->
+            options.forEach { (text, value) ->
                 DropdownMenuItem(
-                    text = { Text(label) },
+                    text = { Text(text) },
                     onClick = {
                         onSelect(value)
                         expanded = false

@@ -8,9 +8,11 @@ import com.example.sasi_smart_life.data.repository.FBDeviceRepository
 import com.example.sasi_smart_life.data.repository.TuyaPairingRepository
 import com.google.firebase.database.FirebaseDatabase
 import com.thingclips.smart.home.sdk.ThingHomeSdk
+import com.thingclips.smart.home.sdk.api.IThingHomeStatusListener
 import com.thingclips.smart.home.sdk.bean.HomeBean
 import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
 import com.thingclips.smart.sdk.api.IDevListener
+import com.thingclips.smart.sdk.api.WifiSignalListener
 import com.thingclips.smart.sdk.bean.DeviceBean
 import com.thingclips.smart.sdk.enums.ActivatorModelEnum
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,12 @@ data class PairingUiState(
     val error: String? = null
 )
 
+data class WifiSignalUiState(
+    val isLoading: Boolean = false,
+    val signalValue: String? = null,
+    val error: String? = null
+)
+
 class TuyaViewModel : ViewModel() {
 
     private val pairingRepo = TuyaPairingRepository()
@@ -34,6 +42,46 @@ class TuyaViewModel : ViewModel() {
 
     val tag = "TuyaVM_SASI"
 
+
+    private val _wifiSignalState = MutableStateFlow(WifiSignalUiState())
+    val wifiSignalState = _wifiSignalState.asStateFlow()
+
+    fun checkWifiSignal(devId: String) {
+        _wifiSignalState.value = WifiSignalUiState(isLoading = true)
+
+        val device = ThingHomeSdk.newDeviceInstance(devId)
+
+        if (device == null) {
+            _wifiSignalState.value = WifiSignalUiState(error = "Device Instance not found")
+            return
+        }
+
+        Log.d(tag, "Requesting Wifi Signal for $devId")
+
+        device.requestWifiSignal(object : WifiSignalListener {
+
+            override fun onSignalValueFind(signal: String?) {
+                Log.d(tag, "Wifi Signal Found: $signal")
+                _wifiSignalState.value = WifiSignalUiState(
+                    isLoading = false,
+                    signalValue = signal ?: "Unknown"
+                )
+            }
+
+            override fun onError(errorCode: String?, errorMsg: String?) {
+                Log.e(tag, "Wifi Signal Error: $errorCode - $errorMsg")
+                _wifiSignalState.value = WifiSignalUiState(
+                    isLoading = false,
+                    error = "$errorMsg ($errorCode)"
+                )
+            }
+        })
+    }
+
+    // Panggil ini saat dialog ditutup agar state kembali bersih
+    fun resetWifiSignalState() {
+        _wifiSignalState.value = WifiSignalUiState()
+    }
     // ===========================
     //          PAIRING
     // ===========================
@@ -132,6 +180,59 @@ class TuyaViewModel : ViewModel() {
     private val localDeviceCache = mutableMapOf<String, MutableMap<String, Any>>()
     private val deviceCategoryMap = mutableMapOf<String, String>()
 
+    private var homeStatusListener: IThingHomeStatusListener? = null
+
+    fun startListeningToHome(homeId: Long) {
+        val cachedHomeBean = ThingHomeSdk.getDataInstance().getHomeBean(homeId)
+        if (cachedHomeBean != null) {
+            Log.d(tag, "🚀 Menggunakan Cache Device List untuk Listener Awal")
+            registerAllDevices(cachedHomeBean.deviceList)
+        }
+
+        val homeInstance = ThingHomeSdk.newHomeInstance(homeId)
+        homeInstance.getHomeDetail(object : IThingHomeResultCallback {
+            override fun onSuccess(bean: HomeBean?) {
+                if (bean != null) {
+                    Log.d(tag, "✅ Data Home Terupdate dari Server")
+                    registerAllDevices(bean.deviceList)
+                }
+            }
+            override fun onError(code: String?, error: String?) {
+                Log.e(tag, "Gagal refresh home: $error")
+            }
+        })
+
+        if (homeStatusListener == null) {
+            homeStatusListener = object : IThingHomeStatusListener {
+                override fun onDeviceAdded(devId: String?) {
+                    if(devId != null) registerListenerForDevice(devId)
+                }
+                override fun onDeviceRemoved(devId: String?) {
+                }
+                override fun onGroupAdded(groupId: Long) {}
+                override fun onGroupRemoved(groupId: Long) {}
+                override fun onMeshAdded(meshId: String?) {}
+            }
+            homeInstance.registerHomeStatusListener(homeStatusListener)
+        }
+    }
+
+    private fun registerAllDevices(devices: List<DeviceBean>?) {
+        devices?.forEach { dev ->
+            if (!activeListeners.containsKey(dev.devId)) {
+                registerListenerForDevice(dev.devId)
+
+                val cat = dev.productBean.category ?: "unknown"
+                deviceCategoryMap[dev.devId] = cat
+
+                if (!userMappingCache.containsKey(dev.devId)) {
+                    deviceRepo.observeUserMapping(dev.devId) { mapping ->
+                        userMappingCache[dev.devId] = mapping
+                    }
+                }
+            }
+        }
+    }
 
     private fun registerListenerForDevice(devId: String) {
         if (activeListeners.containsKey(devId)) return
@@ -269,39 +370,6 @@ class TuyaViewModel : ViewModel() {
 
         Log.i(tag, sb.toString())
     }
-
-
-    fun startListeningToHome(homeId: Long) {
-        if (currentListeningHomeId == homeId) return
-        currentListeningHomeId = homeId
-
-        Log.d(tag, "Mulai melacak Home: $homeId")
-
-        val homeInstance = ThingHomeSdk.newHomeInstance(homeId)
-        homeInstance.getHomeDetail(object : IThingHomeResultCallback {
-            override fun onSuccess(bean: HomeBean?) {
-                val devices = bean?.deviceList ?: emptyList()
-                Log.d(tag, "Ditemukan ${devices.size} device. Mendaftarkan listener...")
-
-                devices.forEach { dev ->
-                    registerListenerForDevice(dev.devId)
-                    val cat = dev.productBean.category ?: "unknown"
-                    deviceCategoryMap[dev.devId] = cat
-                    deviceRepo.observeUserMapping(dev.devId) { mapping ->
-                        userMappingCache[dev.devId] = mapping
-                    }
-//                    val dps = dev.dps
-//                    if (dps != null) {
-//                    }
-                }
-            }
-
-            override fun onError(code: String?, error: String?) {
-                Log.e(tag, "Gagal load home: $error")
-            }
-        })
-    }
-
 
 
     fun stopPairing() {

@@ -32,11 +32,15 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Pin
+import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
@@ -44,10 +48,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -68,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -76,6 +86,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceCategory
@@ -84,6 +95,8 @@ import com.example.sasi_smart_life.data.models.Schedule
 import com.example.sasi_smart_life.data.models.SmartLockLog
 import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
+import com.example.sasi_smart_life.viewModel.TuyaViewModel
+import com.example.sasi_smart_life.viewModel.WifiSignalUiState
 
 // Data class to hold context for the Time Picker
 data class TimePickerContext(val day: String, val type: String) // type can be "On" or "Off"
@@ -92,11 +105,13 @@ data class TimePickerContext(val day: String, val type: String) // type can be "
 fun DetailDeviceDialog(
     device: Device,
     viewModel: MainViewModel,
+    tuyaViewModel: TuyaViewModel,
     devId: String?,
     onBack: () -> Unit,
     categories: List<DeviceCategory>,
 ){
     val appState by viewModel.uiState.collectAsState()
+    val wifiState by tuyaViewModel.wifiSignalState.collectAsState()
     val userMap by viewModel.userMappingState.collectAsState()
     val currentDevice = appState.devices.find { it.devId == devId }
     if (currentDevice == null) {
@@ -114,6 +129,31 @@ fun DetailDeviceDialog(
         categoryData?.imageUrlOn
     }
     val categoryName = categories.find { it.categoryId == currentDevice.category }?.name
+
+    var showEditDialog by remember { mutableStateOf(false) }
+    var deviceToEdit by remember { mutableStateOf<Device?>(null) }
+
+    if (showEditDialog && deviceToEdit != null) {
+        EditDeviceDialog(
+            mainViewModel = viewModel,
+            currentName = deviceToEdit!!.name,
+            currentCategory = deviceToEdit!!.category,
+            onDismissRequest = { showEditDialog = false },
+            onSave = { newName, newCategory ->
+                // Update ke ViewModel / Database
+                viewModel.updateDevice(deviceToEdit!!.devId, newName, newCategory)
+                showEditDialog = false
+            }
+        )
+    }
+
+    if (wifiState.isLoading || wifiState.signalValue != null || wifiState.error != null) {
+        WifiResultDialog(
+            state = wifiState,
+            onDismiss = { tuyaViewModel.resetWifiSignalState() }, // Reset saat tutup
+            onRetry = { tuyaViewModel.checkWifiSignal(currentDevice.devId) }
+        )
+    }
 
     LaunchedEffect(devId) {
         viewModel.loadDeviceUsers(currentDevice.devId)
@@ -171,12 +211,42 @@ fun DetailDeviceDialog(
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(0.65f)) {
-                            Text(currentDevice.name, style = MaterialTheme.typography.titleMedium)
+                            Row {
+                                Text(currentDevice.name, style = MaterialTheme.typography.titleMedium)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = {
+                                        showEditDialog = true
+                                        deviceToEdit = currentDevice
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit",
+                                        tint = sasiColor.yellow500,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = categoryName ?: "Tuya Device",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = sasiColor.black300,
                             )
+                            if (device.isTuya) {
+                                Row {
+                                    Text(
+                                        text = "MAC: ${currentDevice.tuyaInfo?.mac}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = sasiColor.black300,
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Button(onClick = { tuyaViewModel.checkWifiSignal(currentDevice.devId) }) {
+                                        Text("Cek Sinyal Wifi")
+                                    }
+                                }
+                            }
                         }
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -352,6 +422,215 @@ fun DetailDeviceDialog(
                         mainViewModel = viewModel,
                         devId = currentDevice.devId,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WifiResultDialog(
+    state: WifiSignalUiState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        icon = {
+            when {
+                state.isLoading -> CircularProgressIndicator(modifier = Modifier.size(36.dp), color = sasiColor.purple500)
+                state.error != null -> Icon(Icons.Default.SignalWifiOff, contentDescription = null, tint = sasiColor.red500)
+                else -> Icon(Icons.Default.SignalWifi4Bar, contentDescription = null, tint = sasiColor.green500) // Pastikan ada warna ini atau pakai Color.Green
+            }
+        },
+        title = {
+            val titleText = when {
+                state.isLoading -> "Memeriksa Sinyal..."
+                state.error != null -> "Gagal"
+                else -> "Kuat Sinyal"
+            }
+            Text(text = titleText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                if (state.isLoading) {
+                    Text("Sedang menghubungi device...", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tips: Jika sensor baterai, pastikan layar menyala / trigger sensor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                } else if (state.error != null) {
+                    Text(state.error, color = sasiColor.red500, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Device mungkin Offline/Sleep.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                } else {
+                    // HASIL SUKSES
+                    Text(
+                        text = state.signalValue ?: "Unknown",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = sasiColor.purple500
+                    )
+                    Text("Skala 0-100", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+            }
+        },
+        confirmButton = {
+            if (!state.isLoading) {
+                TextButton(onClick = onDismiss) {
+                    Text("Tutup", color = sasiColor.blue500)
+                }
+            }
+        },
+        dismissButton = {
+            if (state.error != null) {
+                TextButton(onClick = onRetry) {
+                    Text("Coba Lagi", color = sasiColor.blue500)
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditDeviceDialog(
+    mainViewModel: MainViewModel,
+    currentName: String,
+    currentCategory: String?,
+    onDismissRequest: () -> Unit,
+    onSave: (newName: String, newCategory: String) -> Unit
+) {
+
+    val appState by mainViewModel.uiState.collectAsState()
+
+    val initialCategory = remember(appState.categories, currentCategory) {
+        appState.categories.find { it.categoryId == currentCategory }
+    }
+
+    var name by remember { mutableStateOf(currentName) }
+    var selectedCategory by remember { mutableStateOf<DeviceCategory?>(initialCategory) }
+    var isCategoryDropdownExpanded by remember { mutableStateOf(false) }
+
+    val colorTextfield = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = sasiColor.purple500,
+        unfocusedBorderColor = sasiColor.black300,
+        cursorColor = sasiColor.purple500,
+        focusedLabelColor = sasiColor.black300,
+    )
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .fillMaxHeight(0.45f),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Edit Device Information",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                Column (modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Enter Location Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = sasiColor.purple500,
+                            unfocusedBorderColor = sasiColor.black300,
+                            cursorColor = sasiColor.purple500,
+                            focusedLabelColor = sasiColor.black300,
+                        )
+                    )
+                    ExposedDropdownMenuBox(
+                        expanded = isCategoryDropdownExpanded,
+                        onExpandedChange = { isCategoryDropdownExpanded = !isCategoryDropdownExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedCategory?.name ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Category") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isCategoryDropdownExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            colors = colorTextfield
+                        )
+                        ExposedDropdownMenu(
+                            expanded = isCategoryDropdownExpanded,
+                            onDismissRequest = { isCategoryDropdownExpanded = false },
+                            containerColor = sasiColor.grey50,
+                        ) {
+                            appState.categories.forEach { category ->
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        AsyncImage(
+                                            model = category.imageUrlOn,
+                                            contentDescription = category.name,
+                                            modifier = Modifier.size(24.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    },
+                                    text = { Text(category.name) },
+                                    onClick = {
+                                        selectedCategory = category
+                                        isCategoryDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = sasiColor.red50)
+                    ) {
+                        Text("Cancel", color = sasiColor.red500)
+                    }
+                    Button(
+                        onClick = {
+                            if (name.isNotBlank()) {
+                                onSave(name, selectedCategory?.categoryId ?: "")
+                                onDismissRequest()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = sasiColor.blue500),
+                        enabled = name.isNotBlank()
+                    ) {
+                        Text("Save", color = Color.White)
+                    }
                 }
             }
         }

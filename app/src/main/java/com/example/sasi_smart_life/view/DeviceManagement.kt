@@ -104,7 +104,8 @@ fun DeviceManagementScreen(
             viewModel = viewModel,
             devId = selectedDeviceForDetail!!.devId,
             categories = appState.categories,
-            onBack = { selectedDeviceForDetail = null }
+            onBack = { selectedDeviceForDetail = null },
+            tuyaViewModel = TuyaViewModel()
         )
     }
 
@@ -594,24 +595,18 @@ private fun DeviceCard(
     }
 }
 
-// Helper sakti untuk mengambil value Tuya tanpa pusing tipe datanya
 fun Any?.getTuyaDp(dpid: Int): Any? {
     val rawData = this ?: return null
 
     return when (rawData) {
-        // Jika Firebase mengirimnya sebagai MAP (Object)
         is Map<*, *> -> {
-            // Coba ambil pakai key String ("1") atau Int (1)
             rawData[dpid.toString()] ?: rawData[dpid]
         }
 
-        // Jika Firebase mengirimnya sebagai LIST (Array)
         is List<*> -> {
-            // Ambil berdasarkan index (karena index array = DPID di Firebase)
             rawData.getOrNull(dpid)
         }
 
-        // Format tidak dikenali
         else -> null
     }
 }
