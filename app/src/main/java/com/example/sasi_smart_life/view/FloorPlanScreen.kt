@@ -194,7 +194,7 @@ private fun DraggableNodeIcon(
     device: Device,
     node: DeviceNode,
     viewModel: MainViewModel,
-    isLock: Boolean
+    isLock: Boolean,
 ) {
     var offsetX by remember { mutableStateOf(node.x) }
     var offsetY by remember { mutableStateOf(node.y) }
@@ -205,7 +205,7 @@ private fun DraggableNodeIcon(
     val imageUrl = if (device.status) category?.imageUrlOn else category?.imageUrlOff
 
     val dragModifier = if (!isLock) {
-        Modifier.pointerInput(node.id) { // Keyed to the node ID
+        Modifier.pointerInput(node.id) {
             detectDragGesturesAfterLongPress(
                 onDragStart = {
                     isBeingDragged = true
@@ -264,6 +264,7 @@ private fun DraggableNodeIcon(
                     else if(category?.name == "Stage") 180.dp
                     else if(category?.name == "Layar") 144.dp
                     else if(category?.name == "Lampu Sorot") 18.dp
+                    else if(category?.name == "Sensor Gerbang") 172.dp
                     else 36.dp)
                     .scale(scaleX = scaleX, scaleY = 1f)
             )

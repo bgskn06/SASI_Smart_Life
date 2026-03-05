@@ -1,13 +1,16 @@
 package com.example.sasi_smart_life.view
 
 import android.app.TimePickerDialog
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +25,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,9 +41,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoubleArrow
+import androidx.compose.material.icons.filled.Input
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,10 +70,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,12 +84,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -82,6 +101,7 @@ import coil.compose.AsyncImage
 import com.example.sasi_smart_life.R
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceCategory
+import com.example.sasi_smart_life.data.models.SceneAction
 import com.example.sasi_smart_life.data.models.SceneCondition
 import com.example.sasi_smart_life.data.models.SceneSchedule
 import com.example.sasi_smart_life.data.models.SmartScene
@@ -166,7 +186,6 @@ fun SmartScene(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
-                contentPadding = PaddingValues(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -208,7 +227,7 @@ fun SceneCard(
     onLongClick: () -> Unit
 ) {
     fun getDeviceName(devId: String?): String {
-        return devices.find { it.devId == devId }?.name ?: devId ?: "?"
+        return devices.find { it.devId == devId }?.name ?: "?"
     }
 
     fun getCategoryIcon(devId: String?): String? {
@@ -217,199 +236,258 @@ fun SceneCard(
         return category?.image?.ifEmpty { category?.imageUrlOn }
     }
 
-    val cardAlpha = if (scene.isActive) 1f else 0.6f
-    val containerColor = if (scene.isActive) Color.White else Color(0xFFF0F0F0)
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 120.dp)
+            .heightIn(min = 140.dp)
             .combinedClickable(
                 onClick = {},
                 onLongClick = onLongClick
             ),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (scene.isActive) 4.dp else 0.dp),
+        colors = CardDefaults.cardColors(containerColor = sasiColor.blue50),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
+        Card(
             modifier = Modifier
-                .padding(12.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Top
+                .fillMaxWidth()
+                .height(130.dp),
+            colors = CardDefaults.cardColors(containerColor = sasiColor.grey50),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, sasiColor.grey600)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(12.dp)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Top
+            ) {
+                Row (
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .background(sasiColor.purple50, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoMode,
+                                contentDescription = null,
+                                tint = sasiColor.purple500
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = scene.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Switch(
+                        checked = scene.isActive,
+                        onCheckedChange = { onToggle(scene.isActive) },
+                        modifier = Modifier.scale(0.7f).height(24.dp),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = sasiColor.purple500,
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.LightGray
+                        )
+                    )
+                }
+
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Input,
+                            contentDescription = null,
+                            tint = sasiColor.red500,
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            scene.ifData.forEachIndexed { index, condition ->
+                                DeviceItemSmall(
+                                    deviceName = getDeviceName(condition.devId),
+                                    statusText = if (condition.status == 1) "ON" else "OFF",
+                                    iconUrl = getCategoryIcon(condition.devId)
+                                )
+
+                                if (index < scene.ifData.size - 1) {
+                                    Text(
+                                        text = scene.logic.uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = sasiColor.purple500,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RocketLaunch,
+                            contentDescription = null,
+                            tint = sasiColor.yellow500,
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            scene.thenAction.forEach { action ->
+                                DeviceItemSmall(
+                                    deviceName = getDeviceName(action.devId),
+                                    statusText = if (action.status == 1) "ON" else "OFF",
+                                    iconUrl = getCategoryIcon(action.devId)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        fun SceneSchedule.getActiveDaysText(): String {
+
+            if (days.isEmpty()) return "-"
+
+            val orderedKeys = listOf(
+                "mon", "tue", "wed", "thu",
+                "fri", "sat", "sun"
+            )
+
+            val activeDays = orderedKeys.filter { days[it] == true }
+
+            if (activeDays.isEmpty()) return "-"
+
+            if (activeDays.size == 7) return "Everyday"
+
+            val dayMap = mapOf(
+                "mon" to "Mon",
+                "tue" to "Tue",
+                "wed" to "Wed",
+                "thu" to "Thu",
+                "fri" to "Fri",
+                "sat" to "Sat",
+                "sun" to "Sun"
+            )
+
+            return activeDays
+                .mapNotNull { dayMap[it] }
+                .joinToString(" ")
+        }
+
+        Row (
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 6.dp, end = 6.dp)
         ) {
             Row (
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(sasiColor.purple50, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoMode,
-                            contentDescription = null,
-                            tint = sasiColor.purple500
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = scene.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Switch(
-                    checked = scene.isActive,
-                    onCheckedChange = { onToggle(scene.isActive) },
-                    modifier = Modifier.scale(0.7f).height(24.dp),
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = sasiColor.purple500,
-                        uncheckedThumbColor = Color.Gray,
-                        uncheckedTrackColor = Color.LightGray
-                    )
+                val isTimeEnabled = scene.schedule.enabled
+                val start = scene.schedule.startTime
+                val end = scene.schedule.endTime
+
+                Icon(
+                    imageVector = Icons.Default.Timer,
+                    contentDescription = null,
+                    tint = sasiColor.green500,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = if (isTimeEnabled) "$start - $end" else "All day",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = sasiColor.black300,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-
-                val isTimeEnabled = scene.schedule as? Boolean ?: false
-                val start = scene.schedule.startTime as? String ?: ""
-                val end = scene.schedule.endTime as? String ?: ""
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .background(sasiColor.green50, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccessTime,
-                            contentDescription = null,
-                            tint = sasiColor.green500
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isTimeEnabled) "$start - $end" else "All day",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = sasiColor.black300,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                // IF TRIGGER
-                val ifDevId = scene.ifData.devId as? String
-                val ifStatus = scene.ifData.status.toString()
-                val ifStateText = if (ifStatus == "1" || ifStatus == "true") "ON" else "OFF"
-
-                val firstAction = scene.thenAction.firstOrNull()
-                val thenDevId = firstAction?.devId as? String
-                val thenStatus = firstAction?.status.toString()
-                val thenStateText = if (thenStatus == "1" || thenStatus == "true") "ON" else "OFF"
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.basicMarquee(
-                        iterations = Int.MAX_VALUE,
-                        animationMode = MarqueeAnimationMode.Immediately,
-                        initialDelayMillis = 3000,
-                        repeatDelayMillis = 3000
-                    )
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(sasiColor.blue50, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        AsyncImage(
-                            model = getCategoryIcon(ifDevId),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${getDeviceName(ifDevId)} ($ifStateText)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = sasiColor.black300,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Icon(imageVector = Icons.Default.ArrowRightAlt, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(sasiColor.blue50, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        AsyncImage(
-                            model = getCategoryIcon(thenDevId),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${getDeviceName(thenDevId)} ($thenStateText)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = sasiColor.black300,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            Text(
+                text = scene.schedule.getActiveDaysText(),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(6.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
 
-// Komponen Kecil untuk Baris Info di dalam Card Grid
 @Composable
-fun MiniInfoRow(label: String, color: Color, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .background(color.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = label,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-        Spacer(modifier = Modifier.width(6.dp))
+fun DeviceItemSmall(
+    deviceName: String,
+    statusText: String,
+    iconUrl: String?
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .background(Color.White, RoundedCornerShape(6.dp))
+            .border(0.5.dp, Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        AsyncImage(
+            model = iconUrl,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+        )
         Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            fontSize = 10.sp,
-            color = Color.Gray,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            text = "$deviceName ($statusText)",
+            style = MaterialTheme.typography.labelSmall,
+            color = sasiColor.black500,
+            maxLines = 1
         )
     }
 }
 
-fun Modifier.scale(scale: Float): Modifier = this.then(
-    Modifier.graphicsLayer(scaleX = scale, scaleY = scale)
-)
+fun mapSelectedDaysToSchedule(selectedDays: Set<Int>): Map<String, Boolean> {
 
-data class StatusOption(val label: String, val value: Int)
+    val dayKeys = listOf(
+        "mon", // 1
+        "tue", // 2
+        "wed", // 3
+        "thu", // 4
+        "fri", // 5
+        "sat", // 6
+        "sun"  // 7
+    )
+
+    return dayKeys.mapIndexed { index, key ->
+        key to selectedDays.contains(index + 1)
+    }.toMap()
+}
 
 @Composable
 fun AddScene(
@@ -419,32 +497,37 @@ fun AddScene(
     onSave: (SmartScene) -> Unit
 ) {
     var sceneName by remember { mutableStateOf("") }
+    var selectedCategoryName by remember { mutableStateOf("General") }
+    var logicOperator by remember { mutableStateOf("AND") }
 
-    var ifDevice by remember { mutableStateOf<Device?>(null) }
-    var ifStatus by remember { mutableStateOf(1) }
+    var ifConditions = remember { mutableStateListOf(SceneCondition())}
 
     var isTimeEnabled by remember { mutableStateOf(false) }
     var startTime by remember { mutableStateOf("00:00") }
     var endTime by remember { mutableStateOf("00:00") }
+    var selectedDays by rememberSaveable {
+        mutableStateOf(setOf(1,2,3,4,5,6,7))
+    }
 
-    var thenDevice by remember { mutableStateOf<Device?>(null) }
-    var thenStatus by remember { mutableStateOf(1) }
+    var thenActions = remember { mutableStateListOf(SceneAction())}
 
-    var ifOperator by remember { mutableStateOf("==") }
-    var ifValueThreshold by remember { mutableStateOf("25") } // Default untuk suhu
-
-    val statusOptions = listOf(
-        StatusOption("ON", 1),
-        StatusOption("OFF", 0)
+    data class SceneCategoryItem(
+        val name: String,
+        val icon: ImageVector,
+    )
+    val sceneCategories = listOf(
+        SceneCategoryItem("General", Icons.Default.Category),
+        SceneCategoryItem("Security", Icons.Default.Shield),
+        SceneCategoryItem("Lighting", Icons.Default.Lightbulb),
     )
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false) // Agar bisa full width
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.CenterEnd // POSISI KANAN
+            contentAlignment = Alignment.CenterEnd
         ) {
             Box(
                 modifier = Modifier
@@ -502,58 +585,47 @@ fun AddScene(
                             )
                         )
 
-                        // --- 2. IF SECTION ---
-                        SectionLabel("IF (Trigger)")
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(0.7f)) {
-                                DeviceDropdown(
-                                    label = "Select Device",
-                                    options = devices,
-                                    category = category,
-                                    selected = ifDevice,
-                                    onSelect = { ifDevice = it }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(modifier = Modifier.weight(0.3f)) {
-                                if (ifDevice != null) {
-                                    val cat = category.find { it.categoryId == ifDevice?.category }
-
-                                    // CEK: Apakah ini sensor suhu?
-                                    if (cat?.name?.lowercase()?.contains("suhu") == true || ifDevice?.category == "sensor_suhu") {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            // Dropdown Operator (>, <, ==)
-                                            Box(modifier = Modifier.weight(0.4f)) {
-                                                OperatorDropdown(ifOperator) { ifOperator = it }
-                                            }
-                                            // Input Angka Suhu
-                                            OutlinedTextField(
-                                                value = ifValueThreshold,
-                                                onValueChange = { if (it.all { char -> char.isDigit() }) ifValueThreshold = it },
-                                                label = { Text("Value") },
-                                                modifier = Modifier.weight(0.6f),
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                suffix = { Text("°C") }
-                                            )
-                                        }
-                                    } else {
-                                        // Jika saklar atau pintu, tampilkan Dropdown ON/OFF biasa
-                                        StatusDropdown(
-                                            label = if (ifDevice?.category == "sensor_pintu") "Pintu" else "Status",
-                                            selectedValue = ifStatus,
-                                            options = if (ifDevice?.category == "sensor_pintu")
-                                                listOf("TERBUKA" to 1, "TERTUTUP" to 0)
-                                            else listOf("ON" to 1, "OFF" to 0),
-                                            onSelect = { ifStatus = it }
-                                        )
+                        Text("Category", style = MaterialTheme.typography.labelMedium, color = sasiColor.black300)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(sceneCategories) { item ->
+                                val isSelected = selectedCategoryName == item.name
+                                Surface(
+                                    modifier = Modifier.clickable { selectedCategoryName = item.name },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) sasiColor.purple500.copy(alpha = 0.1f) else Color.White,
+                                    border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) sasiColor.purple500 else sasiColor.black100)
+                                ) {
+                                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(item.icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (isSelected) sasiColor.purple500 else sasiColor.black300)
+                                        Text(item.name, style = MaterialTheme.typography.bodyMedium, color = if (isSelected) sasiColor.purple500 else sasiColor.black500)
                                     }
                                 }
                             }
                         }
 
-                        SectionLabel("TIME (Validity)")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SectionLabel("IF (Trigger)")
+                            Spacer(Modifier.weight(1f))
+                            LogicToggle(logicOperator) { logicOperator = it }
+                        }
 
+                        ifConditions.forEachIndexed { index, cond ->
+                            ConditionRow(
+                                devices = devices,
+                                categories = category,
+                                condition = cond,
+                                onUpdate = { ifConditions[index] = it },
+                                onDelete = { if (ifConditions.size > 1) ifConditions.removeAt(index) }
+                            )
+                        }
+                        TextButton(
+                            onClick = { ifConditions.add(SceneCondition()) },
+                            colors = ButtonDefaults.textButtonColors(contentColor = sasiColor.purple500)
+                        ) {
+                            Icon(Icons.Default.Add, null, tint = sasiColor.purple500); Text("Add Condition")
+                        }
+
+                        SectionLabel("TIME (Validity)")
                         Card(
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             shape = RoundedCornerShape(8.dp)
@@ -580,7 +652,6 @@ fun AddScene(
                             }
                         }
 
-                        // Field Waktu (Hanya muncul jika switch ON)
                         if (isTimeEnabled) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TimePickerField(
@@ -598,8 +669,6 @@ fun AddScene(
                             }
                         }
 
-                        var selectedDays by remember { mutableStateOf(setOf(1, 2, 3, 4, 5, 6, 7)) } // 1=Mon, 7=Sun
-
                         SectionLabel("REPEAT DAYS")
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -616,7 +685,10 @@ fun AddScene(
                                         .clip(CircleShape)
                                         .background(if (isSelected) sasiColor.purple500 else Color.LightGray)
                                         .clickable {
-                                            selectedDays = if (isSelected) selectedDays - dayNum else selectedDays + dayNum
+                                            selectedDays = if (isSelected)
+                                                selectedDays - dayNum
+                                            else
+                                                selectedDays + dayNum
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -625,55 +697,21 @@ fun AddScene(
                             }
                         }
 
-                        // --- 4. THEN SECTION ---
                         SectionLabel("THEN (Action)")
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Pilih Device (Lebar 70%)
-                            Box(modifier = Modifier.weight(0.7f)) {
-                                DeviceDropdown(
-                                    label = "Select Target",
-                                    options = devices,
-                                    selected = thenDevice,
-                                    category = category,
-                                    onSelect = { thenDevice = it }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(modifier = Modifier.weight(0.3f)) {
-                                if (thenDevice != null) {
-                                    val cat = category.find { it.categoryId == ifDevice?.category }
-
-                                    // CEK: Apakah ini sensor suhu?
-                                    if (cat?.name?.lowercase()?.contains("suhu") == true || ifDevice?.category == "sensor_suhu") {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            // Dropdown Operator (>, <, ==)
-                                            Box(modifier = Modifier.weight(0.4f)) {
-                                                OperatorDropdown(ifOperator) { ifOperator = it }
-                                            }
-                                            // Input Angka Suhu
-                                            OutlinedTextField(
-                                                value = ifValueThreshold,
-                                                onValueChange = { if (it.all { char -> char.isDigit() }) ifValueThreshold = it },
-                                                label = { Text("Value") },
-                                                modifier = Modifier.weight(0.6f),
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                suffix = { Text("°C") }
-                                            )
-                                        }
-                                    } else {
-                                        // Jika saklar atau pintu, tampilkan Dropdown ON/OFF biasa
-                                        StatusDropdown(
-                                            label = if (ifDevice?.category == "sensor_pintu") "Pintu" else "Status",
-                                            selectedValue = ifStatus,
-                                            options = if (ifDevice?.category == "sensor_pintu")
-                                                listOf("TERBUKA" to 1, "TERTUTUP" to 0)
-                                            else listOf("ON" to 1, "OFF" to 0),
-                                            onSelect = { ifStatus = it }
-                                        )
-                                    }
-                                }
-                            }
+                        thenActions.forEachIndexed { index, action ->
+                            ActionRow(
+                                devices = devices,
+                                categories = category,
+                                action = action,
+                                onUpdate = { thenActions[index] = it },
+                                onDelete = { if (thenActions.size > 1) thenActions.removeAt(index) }
+                            )
+                        }
+                        TextButton(
+                            onClick = { thenActions.add(SceneAction()) },
+                            colors = ButtonDefaults.textButtonColors(contentColor = sasiColor.purple500)
+                        ) {
+                            Icon(Icons.Default.Add, null, tint = sasiColor.purple500); Text("Add Action")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                     }
@@ -682,24 +720,19 @@ fun AddScene(
 
                     Button(
                         onClick = {
-                            if (ifDevice != null && thenDevice != null) {
-                                val isSuhu = ifDevice?.category?.contains("suhu") == true
-                                val newScene = SmartScene(
+                            val validIf = ifConditions.filter { it.devId.isNotEmpty() }
+                            val validThen = thenActions.filter { it.devId.isNotEmpty() }
+                            if (validIf.isNotEmpty() && validThen.isNotEmpty()) {
+                                onSave(SmartScene(
                                     sceneId = System.currentTimeMillis().toString(),
                                     name = sceneName,
                                     isActive = true,
-                                    ifData = SceneCondition(
-                                        devId = ifDevice!!.devId,
-                                        operator = if (isSuhu) ifOperator else "==",
-                                        status = if (isSuhu) ifValueThreshold.toInt() else ifStatus
-                                    ),
-                                    schedule = SceneSchedule(
-                                        enabled = isTimeEnabled,
-                                        startTime = startTime,
-                                        endTime = endTime
-                                    ),
-                                )
-                                onSave(newScene)
+                                    category = selectedCategoryName,
+                                    ifData = validIf,
+                                    logic = logicOperator,
+                                    schedule = SceneSchedule(isTimeEnabled, startTime, endTime, mapSelectedDaysToSchedule(selectedDays)),
+                                    thenAction = validThen
+                                ))
                             }
                         },
                         modifier = Modifier
@@ -711,6 +744,88 @@ fun AddScene(
                         Text("SAVE SCENE", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ConditionRow(
+    devices: List<Device>,
+    categories: List<DeviceCategory>,
+    condition: SceneCondition,
+    onUpdate: (SceneCondition) -> Unit,
+    onDelete: () -> Unit
+) {
+    val selectedDev = devices.find { it.devId == condition.devId }
+    val cat = categories.find { it.categoryId == selectedDev?.category }
+    val isSuhu = cat?.name?.lowercase()?.contains("suhu") == true
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.weight(0.5f)) {
+            DeviceDropdown(label = "Device", options = devices, category = categories, selected = selectedDev, onSelect = { onUpdate(condition.copy(devId = it?.devId ?: "")) })
+        }
+        Box(modifier = Modifier.weight(0.4f)) {
+            if (isSuhu) {
+                // UI untuk Suhu (Operator + Value)
+                Row { /* Sama seperti kode lamamu tapi panggil onUpdate(condition.copy(...)) */ }
+            } else {
+                StatusDropdown(
+                    label = "Status",
+                    selectedValue = condition.status,
+                    options = if (cat?.name?.lowercase()?.contains("door") == true) listOf("Open" to 0, "Closed" to 1) else listOf("On" to 1, "Off" to 0),
+                    onSelect = { onUpdate(condition.copy(status = it)) }
+                )
+            }
+        }
+        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete", tint = Color.Red) }
+    }
+}
+
+@Composable
+fun ActionRow(
+    devices: List<Device>,
+    categories: List<DeviceCategory>,
+    action: SceneAction,
+    onUpdate: (SceneAction) -> Unit,
+    onDelete: () -> Unit
+) {
+    val selectedDev = devices.find { it.devId == action.devId }
+    val cat = categories.find { it.categoryId == selectedDev?.category }
+    val isSuhu = cat?.name?.lowercase()?.contains("suhu") == true
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.weight(0.5f)) {
+            DeviceDropdown(label = "Device", options = devices, category = categories, selected = selectedDev, onSelect = { onUpdate(action.copy(devId = it?.devId ?: "")) })
+        }
+        Box(modifier = Modifier.weight(0.4f)) {
+            if (isSuhu) {
+                Row { /* Sama seperti kode lamamu tapi panggil onUpdate(condition.copy(...)) */ }
+            } else {
+                StatusDropdown(
+                    label = "Status",
+                    selectedValue = action.status,
+                    options = if (cat?.name?.lowercase()?.contains("door") == true) listOf("Open" to 0, "Closed" to 1) else listOf("On" to 1, "Off" to 0),
+                    onSelect = { onUpdate(action.copy(status = it)) }
+                )
+            }
+        }
+        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete", tint = Color.Red) }
+    }
+}
+
+@Composable
+fun LogicToggle(selected: String, onSelect: (String) -> Unit) {
+    Row(modifier = Modifier.background(sasiColor.grey600, RoundedCornerShape(8.dp)).padding(2.dp)) {
+        listOf("AND", "OR").forEach { label ->
+            val isSelected = selected == label
+            Box(modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (isSelected) sasiColor.purple500 else Color.Transparent)
+                .clickable { onSelect(label) }
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text(label, color = if (isSelected) Color.White else Color.Black, fontSize = 12.sp)
             }
         }
     }
@@ -907,7 +1022,6 @@ fun TimePickerField(
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
 
-    // Parsing jam yang ada (misal "22:00")
     val parts = time.split(":")
     val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
     val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
@@ -915,13 +1029,12 @@ fun TimePickerField(
     val timePickerDialog = TimePickerDialog(
         context,
         { _, h, m ->
-            // Format HH:mm (contoh: 05:00)
             val formattedTime = String.format("%02d:%02d", h, m)
             onTimeSelected(formattedTime)
         },
         hour,
         minute,
-        true // 24 hour format
+        true
     )
 
     OutlinedTextField(
@@ -929,8 +1042,8 @@ fun TimePickerField(
         onValueChange = {},
         readOnly = true,
         label = { Text(label) },
-        modifier = modifier.clickable { timePickerDialog.show() }, // Klik field -> Muncul Dialog Jam
-        enabled = false, // Hack biar klik tembus ke modifier clickable
+        modifier = modifier.clickable { timePickerDialog.show() },
+        enabled = false,
         colors = OutlinedTextFieldDefaults.colors(
             disabledTextColor = Color.Black,
             disabledContainerColor = Color.White,

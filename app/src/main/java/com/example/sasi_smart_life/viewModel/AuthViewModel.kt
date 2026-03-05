@@ -23,7 +23,9 @@ class AuthViewModel : ViewModel() {
 
     private val _authState = MutableStateFlow(AuthState())
     val authState = _authState.asStateFlow()
-    private val db = FirebaseDatabase.getInstance("https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app/").reference
+    private val db = FirebaseDatabase.getInstance("https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/").reference
+
+    private val tag = "AuthViewModel_SASI"
 
 
     fun login(email: String, password: String) {
@@ -49,7 +51,6 @@ class AuthViewModel : ViewModel() {
 
                     val uid = auth.currentUser!!.uid
 
-                    // SIMPAN DATA USER KE REALTIME DATABASE
                     val userData = mapOf(
                         "name" to name,
                         "email" to email
@@ -58,12 +59,11 @@ class AuthViewModel : ViewModel() {
                     db.child("users").child(uid)
                         .setValue(userData)
                         .addOnSuccessListener {
-                            // AUT0 LOGIN (karena firebase sudah login otomatis)
                             _authState.value = AuthState(
                                 isLoading = false,
                                 info = "Registrasi berhasil!"
                             )
-                            Log.d("AUTH_DB", "User saved successfully!")
+                            Log.d(tag, "User saved successfully!")
 
                         }
                         .addOnFailureListener {
@@ -71,7 +71,7 @@ class AuthViewModel : ViewModel() {
                                 isLoading = false,
                                 error = "Tidak bisa menyimpan ke database: ${it.message}"
                             )
-                            Log.e("AUTH_DB", "Firebase DB Error: ${it.message}")
+                            Log.e(tag, "Firebase DB Error: ${it.message}")
                         }
 
                 } else {
@@ -85,7 +85,6 @@ class AuthViewModel : ViewModel() {
 
 
     fun kirimKodeVerifikasi(email: String) {
-        // This function is typically called to re-verify an email, not for initial sign-up.
         val user = auth.currentUser
         user?.sendEmailVerification()?.addOnCompleteListener {
             if (it.isSuccessful) {

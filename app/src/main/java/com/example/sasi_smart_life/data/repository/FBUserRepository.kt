@@ -5,7 +5,7 @@ import com.google.firebase.database.*
 
 class FBUserRepository {
 
-    private val db = FirebaseDatabase.getInstance("https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app/").reference
+    private val db = FirebaseDatabase.getInstance("https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/").reference
 
     fun getUser(uid: String, callback: (User?) -> Unit) {
         db.child("users").child(uid)

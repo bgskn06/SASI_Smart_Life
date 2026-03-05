@@ -94,8 +94,8 @@ class TuyaViewModel : ViewModel() {
 
         pairingRepo.getPairingToken(homeId) { token ->
             if (token != null) {
-                cachedToken = token // SIMPAN TOKEN DI SINI
-                _pairingState.value = PairingUiState(step = PairingStep.IDLE) // Balik ke IDLE tapi sudah punya token
+                cachedToken = token
+                _pairingState.value = PairingUiState(step = PairingStep.IDLE)
                 onResult(true)
             } else {
                 _pairingState.value = PairingUiState(step = PairingStep.ERROR, error = "Gagal ambil token. Pastikan ada internet.")
@@ -176,7 +176,6 @@ class TuyaViewModel : ViewModel() {
     // ===========================
     private var currentListeningHomeId: Long? = null
     private val activeListeners = mutableMapOf<String, IDevListener>()
-
     private val localDeviceCache = mutableMapOf<String, MutableMap<String, Any>>()
     private val deviceCategoryMap = mutableMapOf<String, String>()
 
@@ -242,7 +241,7 @@ class TuyaViewModel : ViewModel() {
         val listener = object : IDevListener {
 
             override fun onDpUpdate(devId: String, dpStr: String) {
-                Log.w(tag, "Received DP Update: $dpStr")
+                Log.w(tag, "devId : $devId Update: $dpStr")
                 filterDp(devId, dpStr)
             }
 

@@ -5,7 +5,7 @@ import com.google.firebase.database.FirebaseDatabase
 
 class FBCategoryRepository {
     private val db = FirebaseDatabase.getInstance(
-        "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
+        "https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/"
     ).reference.child("deviceCategory")
 
     fun createCategory(
@@ -19,6 +19,7 @@ class FBCategoryRepository {
     ) {
         Log.d("CATEGORY_SASI", "Attempting to create category. Name: $name, HomeID: $homeId")
         val categoryData = mapOf(
+            "categoryId" to categoryId,
             "name" to name,
             "homeId" to homeId,
             "image" to image,
@@ -26,7 +27,7 @@ class FBCategoryRepository {
             "imageUrlOff" to imageUrlOff
         )
 
-        db.child(categoryId).setValue(categoryData)
+        db.child(name).setValue(categoryData)
             .addOnSuccessListener {
                 Log.d("CATEGORY_SASI", "Successfully created category with ID: $categoryId")
                 onComplete(true, null)

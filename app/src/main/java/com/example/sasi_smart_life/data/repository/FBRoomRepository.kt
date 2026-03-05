@@ -9,7 +9,7 @@ import com.google.firebase.database.ValueEventListener
 class FBRoomRepository {
 
     private val db = FirebaseDatabase.getInstance(
-        "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
+        "https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/"
     ).reference.child("rooms")
 
     fun createRoom(

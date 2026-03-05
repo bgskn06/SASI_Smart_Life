@@ -57,10 +57,10 @@ class MainViewModel(
                 val uid = user.uid
                 tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
                     if (success) {
-//                        Log.d(tag, "Tuya Login Success!")
+                        Log.d(tag, "Tuya Login Success!")
                         loadAllData()
                     } else {
-//                        Log.e(tag, "Tuya Login Failed: $error")
+                        Log.e(tag, "Tuya Login Failed: $error")
                         _uiState.value = _uiState.value.copy(error = "Tuya Error: $error")
                     }
                 }
@@ -79,7 +79,6 @@ class MainViewModel(
             dbRef.removeEventListener(sceneEventListener!!)
         }
     }
-
 
     // ----------------------------------------------------
     // LOGOUT
@@ -163,11 +162,9 @@ class MainViewModel(
         val uid = auth.currentUser?.uid ?: return
 
         homes.forEach { home ->
-            // Cek apakah rumah ini belum punya ID Tuya (masih 0)
             if (home.tuyaHomeId == 0L) {
-//                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
+                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
 
-                // --- LANGSUNG PANGGIL SDK TUYA DI SINI ---
                 ThingHomeSdk.getHomeManagerInstance().createHome(
                     home.name,
                     0.0, // lon default
@@ -178,13 +175,11 @@ class MainViewModel(
                         override fun onSuccess(bean: HomeBean?) {
                             val newTuyaId = bean?.homeId
                             if (newTuyaId != null) {
-//                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
+                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
 
-                                // Update ke Firebase menggunakan Repo Home yang lama
                                 homeRepo.updateTuyaHomeId(home.homeId, newTuyaId) { success ->
                                     if (success) {
-//                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
-                                        // Refresh data UI agar ID baru termuat
+                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
                                         loadHomes(uid)
                                     }
                                 }
@@ -192,7 +187,7 @@ class MainViewModel(
                         }
 
                         override fun onError(errorCode: String?, errorMsg: String?) {
-//                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
+                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
                         }
                     }
                 )
@@ -200,7 +195,6 @@ class MainViewModel(
         }
     }
 
-    // Helper simple untuk list ruangan (bisa dikosongkan jika repot)
     private fun listRoomNames(homeId: String): List<String> {
         return listOf("Default Room") // Tuya butuh minimal 1 ruangan saat create
     }
@@ -215,8 +209,10 @@ class MainViewModel(
 
     fun createHome(name: String, imageUrl: String = "") {
         val uid = auth.currentUser?.uid ?: return
+        val homeId = "home_${System.currentTimeMillis()}"
 
         homeRepo.createHome(
+            homeId = homeId,
             name = name,
             ownerUid = uid,
             imageUrl = imageUrl
@@ -557,13 +553,13 @@ class MainViewModel(
         if (device.isTuya) {
             ThingHomeSdk.newDeviceInstance(device.devId)?.removeDevice(object : IResultCallback {
                     override fun onSuccess() {
-//                        Log.d(tag, "Berhasil unbind Tuya: ${device.devId}")
+                        Log.d(tag, "Berhasil unbind Tuya: ${device.devId}")
                         deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
                     }
 
                     override fun onError(code: String?, error: String?) {
-//                        Log.e(tag, "Gagal unbind Tuya: ${device.devId} $error")
-                        deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
+                        Log.e(tag, "Gagal unbind Tuya: ${device.devId} $error")
+//                        deviceRepo.deleteDevice(device.devId, onFirebaseComplete)
                     }
                 }
             )
@@ -657,7 +653,7 @@ class MainViewModel(
     // SCENES
     // ----------------------------------------------------
     private var sceneEventListener: ChildEventListener? = null
-    private val dbRef = FirebaseDatabase.getInstance("https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app").getReference("device")
+    private val dbRef = FirebaseDatabase.getInstance("https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/").getReference("device")
 
     private fun loadScenes(homeId: String) {
         sceneRepo.getScenes(homeId) { list ->
@@ -667,24 +663,25 @@ class MainViewModel(
                     homeId = homeId,
                     isActive = m["isActive"] as? Boolean ?: true,
                     name = m["name"] as? String ?: "Unknown",
-                    ifData = SceneCondition(
-                        devId = (m["if"] as? Map<*, *>)?.get("devId") as? String ?: "",
-                        operator = (m["if"] as? Map<*, *>)?.get("operator") as? String
-                            ?: "==",
-                        status = ((m["if"] as? Map<*, *>)?.get("status") as? Number)?.toInt()
-                            ?: 0
-                    ),
+                    ifData = (m["ifData"] as? List<Map<String, Any>>)?.map {
+                        SceneCondition(
+                            devId = it["devId"] as String,
+                            operator = it["operator"] as String,
+                            status = (it["status"] as Number).toInt())
+
+                    } ?: emptyList(),
+                    logic = m["logic"] as? String ?: "",
                     schedule = SceneSchedule(
                         enabled = (m["schedule"] as? Map<*, *>)?.get("enabled") as? Boolean
                             ?: false,
                         startTime = (m["schedule"] as? Map<*, *>)?.get("startTime") as? String
-                            ?: "00:00",
+                            ?: "",
                         endTime = (m["schedule"] as? Map<*, *>)?.get("endTime") as? String
-                            ?: "23:59",
+                            ?: "",
                         days = (m["schedule"] as? Map<*, *>)?.get("days") as? Map<String, Boolean>
                             ?: emptyMap()
                     ),
-                    thenAction = (m["then"] as? List<Map<String, Any>>)?.map {
+                    thenAction = (m["thenAction"] as? List<Map<String, Any>>)?.map {
                         SceneAction(it["devId"] as String, (it["status"] as Number).toInt())
                     } ?: emptyList()
                 )

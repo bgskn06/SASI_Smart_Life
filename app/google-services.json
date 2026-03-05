@@ -1,13 +1,14 @@
-{
+  {
   "project_info": {
-    "project_number": "92041621090",
-    "project_id": "iot-control-aee03",
-    "storage_bucket": "iot-control-aee03.firebasestorage.app"
+    "project_number": "896008412349",
+    "firebase_url": "https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "sasi-smart-life",
+    "storage_bucket": "sasi-smart-life.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:92041621090:android:0af36b6ca90b25e288ab3b",
+        "mobilesdk_app_id": "1:896008412349:android:3e31169614df3bff296bd4",
         "android_client_info": {
           "package_name": "com.example.sasi_smart_life"
         }
@@ -15,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBAQQ7d7a1a4_y58RZb-fJpXRUivr6yFXM"
+          "current_key": "AIzaSyCE_hMO9yxn6IGr-niNUdY-HbaprejF7lI"
         }
       ],
       "services": {

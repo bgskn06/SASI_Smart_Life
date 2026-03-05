@@ -140,7 +140,6 @@ fun DetailDeviceDialog(
             currentCategory = deviceToEdit!!.category,
             onDismissRequest = { showEditDialog = false },
             onSave = { newName, newCategory ->
-                // Update ke ViewModel / Database
                 viewModel.updateDevice(deviceToEdit!!.devId, newName, newCategory)
                 showEditDialog = false
             }
@@ -150,7 +149,7 @@ fun DetailDeviceDialog(
     if (wifiState.isLoading || wifiState.signalValue != null || wifiState.error != null) {
         WifiResultDialog(
             state = wifiState,
-            onDismiss = { tuyaViewModel.resetWifiSignalState() }, // Reset saat tutup
+            onDismiss = { tuyaViewModel.resetWifiSignalState() },
             onRetry = { tuyaViewModel.checkWifiSignal(currentDevice.devId) }
         )
     }

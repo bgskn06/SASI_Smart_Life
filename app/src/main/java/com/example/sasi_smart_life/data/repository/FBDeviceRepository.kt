@@ -4,7 +4,6 @@ import android.util.Log
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceNode
 import com.example.sasi_smart_life.data.models.DoorSensorLog
-import com.example.sasi_smart_life.data.models.Schedule
 import com.example.sasi_smart_life.data.models.SmartLockLog
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -13,14 +12,11 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.tasks.await
-import kotlin.coroutines.resume
 
 class FBDeviceRepository {
 
     private val db = FirebaseDatabase.getInstance(
-        "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
+        "https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/"
     ).reference
 
     private val deviceListenersMap = mutableMapOf<String, ValueEventListener>()
@@ -78,26 +74,20 @@ class FBDeviceRepository {
     fun updateDeviceSchedule(devId: String, newSchedule: Map<String, Any>, onComplete: (Boolean, String?) -> Unit) {
         db.child("device").child(devId).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val deviceData = snapshot.value as? Map<String, @JvmSuppressWildcards Any>
+                val deviceData = snapshot.value as? Map<String, Any>
                 val roomId = deviceData?.get("roomId") as? String
-                val existingSchedule = (deviceData?.get("schedule") as? Map<String, Map<String, Any>>) ?: emptyMap()
 
                 val updates = mutableMapOf<String, Any?>()
 
                 newSchedule.forEach { (day, newValues) ->
                     if (newValues is Map<*, *>) {
-                        @Suppress("UNCHECKED_CAST")
-                        val fieldsToUpdate = newValues as Map<String, Any>
+                        val fields = newValues as Map<String, Any>
 
-                        fieldsToUpdate.forEach { (field, value) ->
+                        fields.forEach { (field, value) ->
                             updates["/device/$devId/schedule/$day/$field"] = value
-                        }
-
-                        // Update denormalized location (full map for the day)
-                        if (!roomId.isNullOrBlank()) {
-                            val daySchedule = existingSchedule[day]?.toMutableMap() ?: mutableMapOf()
-                            daySchedule.putAll(fieldsToUpdate)
-                            updates["/status/$roomId/schedule/$day/$devId"] = daySchedule
+                            if (!roomId.isNullOrBlank()) {
+                                updates["/status/$roomId/schedule/$day/$devId/$field"] = value
+                            }
                         }
                     }
                 }
@@ -107,7 +97,7 @@ class FBDeviceRepository {
                         .addOnSuccessListener { onComplete(true, null) }
                         .addOnFailureListener { e -> onComplete(false, e.message) }
                 } else {
-                    onComplete(true, null) // Nothing to update
+                    onComplete(true, null)
                 }
             }
 

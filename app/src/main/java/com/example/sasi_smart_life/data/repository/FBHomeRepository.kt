@@ -6,17 +6,16 @@ import com.google.firebase.database.FirebaseDatabase
 class FBHomeRepository {
 
     private val db = FirebaseDatabase.getInstance(
-        "https://iot-control-aee03-default-rtdb.asia-southeast1.firebasedatabase.app"
+        "https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/"
     ).reference.child("homes")
 
     fun createHome(
+        homeId: String,
         name: String,
         ownerUid: String,
         imageUrl: String = "",
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val homeId = "home_${System.currentTimeMillis()}"
-        val homeRef = db.child(homeId)
 
         val data = mapOf(
             "name" to name,
@@ -24,7 +23,7 @@ class FBHomeRepository {
             "ownerUid" to ownerUid
         )
 
-        homeRef.setValue(data)
+        db.child(homeId).setValue(data)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { e -> onComplete(false, e.message) }
     }

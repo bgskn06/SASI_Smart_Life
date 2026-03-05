@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -116,43 +117,57 @@ fun SettingScreen(
             var selectedTab by remember { mutableStateOf("Room") }
             Row(modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.05f)) {
-                val buttonShape = RoundedCornerShape(50)
-                Text(
-                    "Room",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selectedTab == "Room") sasiColor.blue50 else sasiColor.black300,
-                    modifier = Modifier
-                        .clip(buttonShape)
-                        .clickable { selectedTab = "Room" }
-                        .background(if (selectedTab == "Room") sasiColor.blue500 else Color.Transparent)
-                        .border(
-                            BorderStroke(
-                                1.dp,
-                                if (selectedTab == "Room") Color.Transparent else sasiColor.grey600
-                            ),
-                            buttonShape
-                        )
-                        .padding(horizontal = 12.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Smart Scene",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selectedTab == "Smart Scene") sasiColor.blue50 else sasiColor.black300,
-                    modifier = Modifier
-                        .clip(buttonShape)
-                        .clickable { selectedTab = "Smart Scene" }
-                        .background(if (selectedTab == "Smart Scene") sasiColor.blue500 else Color.Transparent)
-                        .border(
-                            BorderStroke(
-                                1.dp,
-                                if (selectedTab == "Smart Scene") Color.Transparent else sasiColor.grey600
-                            ),
-                            buttonShape
-                        )
-                        .padding(horizontal = 12.dp)
-                )
+                .weight(0.05f),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row{
+                    val buttonShape = RoundedCornerShape(50)
+                    Text(
+                        "Room",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selectedTab == "Room") sasiColor.blue50 else sasiColor.black300,
+                        modifier = Modifier
+                            .clip(buttonShape)
+                            .clickable { selectedTab = "Room" }
+                            .background(if (selectedTab == "Room") sasiColor.blue500 else Color.Transparent)
+                            .border(
+                                BorderStroke(
+                                    1.dp,
+                                    if (selectedTab == "Room") Color.Transparent else sasiColor.grey600
+                                ),
+                                buttonShape
+                            )
+                            .padding(horizontal = 12.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Smart Scene",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selectedTab == "Smart Scene") sasiColor.blue50 else sasiColor.black300,
+                        modifier = Modifier
+                            .clip(buttonShape)
+                            .clickable { selectedTab = "Smart Scene" }
+                            .background(if (selectedTab == "Smart Scene") sasiColor.blue500 else Color.Transparent)
+                            .border(
+                                BorderStroke(
+                                    1.dp,
+                                    if (selectedTab == "Smart Scene") Color.Transparent else sasiColor.grey600
+                                ),
+                                buttonShape
+                            )
+                            .padding(horizontal = 12.dp)
+                    )
+                }
+                if(selectedTab == "Smart Scene"){
+                    Text(
+                        text = "One Tap",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sasiColor.blue300,
+                        modifier = Modifier.clickable{
+
+                        }
+                    )
+                }
             }
 
             Box(modifier = Modifier

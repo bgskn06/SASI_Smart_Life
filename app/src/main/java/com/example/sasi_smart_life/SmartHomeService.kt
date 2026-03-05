@@ -27,13 +27,11 @@ import java.util.Locale
 
 class SmartHomeService : Service() {
 
-    private val tag = "SmartHomeService"
+    private val tag = "SmartHomeService_SASI"
 
     private val deviceRepo = FBDeviceRepository()
     private val sceneRepo = FBSceneRepository()
     private val homeRepo = FBHomeRepository()
-
-    // Global Cache
     private val globalScenesCache = mutableListOf<SmartScene>()
     private val globalDevicesCache = mutableListOf<Device>()
 
@@ -59,15 +57,13 @@ class SmartHomeService : Service() {
         }
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("SASI Smart Home")
+            .setContentTitle("Realtime Automation")
             .setContentText("Monitoring automation running...")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.logo)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // 🔥 PERBAIKAN UNTUK ANDROID 14 (API 34) 🔥
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Tentukan tipe service sesuai Manifest
             val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 
             startForeground(1, notification, serviceType)
@@ -103,13 +99,14 @@ class SmartHomeService : Service() {
                             homeId = home.homeId,
                             isActive = m["isActive"] as? Boolean ?: true,
                             name = m["name"] as? String ?: "Unknown",
-                            ifData = SceneCondition(
-                                devId = (m["if"] as? Map<*, *>)?.get("devId") as? String ?: "",
-                                operator = (m["if"] as? Map<*, *>)?.get("operator") as? String
-                                    ?: "==",
-                                status = ((m["if"] as? Map<*, *>)?.get("status") as? Number)?.toInt()
-                                    ?: 0
-                            ),
+                            logic = m["logic"] as? String ?: "AND",
+                            ifData = (m["ifData"] as? List<Map<String, Any>>)?.map {
+                                SceneCondition(
+                                    devId = it["devId"] as String,
+                                    operator = it["operator"] as String,
+                                    status = (it["status"] as Number).toInt()
+                                )
+                            } ?: emptyList(),
                             schedule = SceneSchedule(
                                 enabled = (m["schedule"] as? Map<*, *>)?.get("enabled") as? Boolean
                                     ?: false,
@@ -120,7 +117,7 @@ class SmartHomeService : Service() {
                                 days = (m["schedule"] as? Map<*, *>)?.get("days") as? Map<String, Boolean>
                                     ?: emptyMap()
                             ),
-                            thenAction = (m["then"] as? List<Map<String, Any>>)?.map {
+                            thenAction = (m["thenAction"] as? List<Map<String, Any>>)?.map {
                                 SceneAction(it["devId"] as String, (it["status"] as Number).toInt())
                             } ?: emptyList()
                         )
@@ -130,7 +127,6 @@ class SmartHomeService : Service() {
                 globalScenesCache.addAll(scenes)
             }
 
-            // Tambahkan Listener dan simpan referensinya
             deviceRepo.getDevicesByHomeListener(home.homeId) { list ->
                 val devices = list.map { m ->
                     Device(
@@ -142,10 +138,8 @@ class SmartHomeService : Service() {
                     )
                 }
 
-                // Cek perubahan untuk trigger otomatisasi
                 devices.forEach { newDeviceData ->
                     val oldDeviceData = globalDevicesCache.find { it.devId == newDeviceData.devId }
-                    // Hanya cek scene jika statusnya BERUBAH (mencegah loop)
                     if (oldDeviceData?.status != newDeviceData.status) {
                         checkAndExecuteScene(newDeviceData)
                     }
@@ -155,44 +149,61 @@ class SmartHomeService : Service() {
                 globalDevicesCache.addAll(devices)
             }
         }
+        Log.d(tag, "✅ Global Logic Loaded")
     }
+
     private fun checkAndExecuteScene(triggerDevice: Device) {
         try {
-            globalScenesCache.filter { it.isActive && it.ifData.devId == triggerDevice.devId }
-                .forEach { scene ->
-                    val currentStatus = if (triggerDevice.status) 1 else 0
-                    val threshold = scene.ifData.status
+            val relatedScenes = globalScenesCache.filter { scene ->
+                scene.isActive && scene.ifData.any { it.devId == triggerDevice.devId }
+            }
 
-                    val isTriggered = when (scene.ifData.operator) {
-                        ">" -> currentStatus > threshold
-                        "<" -> currentStatus < threshold
-                        else -> currentStatus == threshold
+            relatedScenes.forEach { scene ->
+                val conditionResults = scene.ifData.map { condition ->
+                    val deviceInCache = globalDevicesCache.find { it.devId == condition.devId }
+
+                    val currentStatus = if (condition.devId == triggerDevice.devId) {
+                        if (triggerDevice.status) 1 else 0
+                    } else {
+                        if (deviceInCache?.status == true) 1 else 0
                     }
 
-                    if (isTriggered && isTimeValid(scene)) {
-                        executeScene(scene)
+                    when (condition.operator) {
+                        "==" -> currentStatus == condition.status
+                        "!=" -> currentStatus != condition.status
+                        ">"  -> currentStatus > condition.status
+                        "<"  -> currentStatus < condition.status
+                        else -> currentStatus == condition.status
                     }
                 }
+
+                val isTriggered = if (scene.logic == "OR") {
+                    conditionResults.any { it }
+                } else {
+                    conditionResults.all { it }
+                }
+
+                if (isTriggered && isTimeValid(scene)) {
+                    Log.d(tag, "🚀 Executing Scene: ${scene.name}")
+                    executeScene(scene)
+                }
+            }
         } catch (e: Exception) {
-            Log.e(tag, "Gagal memproses scene untuk device ${triggerDevice.devId}: ${e.message}")
+            Log.e(tag, "Gagal memproses scene: ${e.message}")
         }
     }
-    private fun isTimeValid(scene: SmartScene): Boolean {
-        // 1. Pastikan schedule tidak null
-        val schedule = scene.schedule ?: return true
 
-        // 2. Jika tidak diaktifkan, abaikan pengecekan waktu
-        if (schedule.enabled != true) return true
+    private fun isTimeValid(scene: SmartScene): Boolean {
+        val schedule = scene.schedule
+
+        if (scene.schedule.enabled != true) return true
 
         val calendar = Calendar.getInstance()
 
-        // 3. Cek Hari (Safe Handling)
         val dayFormat = SimpleDateFormat("EEE", Locale.ENGLISH)
         val currentDay = dayFormat.format(calendar.time).lowercase()
 
         if (scene.schedule.days[currentDay] != true) return false
-
-        // 4. Cek Jam (Safe Parsing)
         try {
             val nowHour = calendar.get(Calendar.HOUR_OF_DAY)
             val nowMin = calendar.get(Calendar.MINUTE)
@@ -211,14 +222,13 @@ class SmartHomeService : Service() {
             }
         } catch (e: Exception) {
             Log.e("SmartHomeService", "Error parsing time: ${e.message}")
-            return true // Default true agar tidak menghalangi aksi jika format salah
+            return true
         }
     }
     private fun executeScene(scene: SmartScene) {
         scene.thenAction.forEach { action ->
             val targetDevice = globalDevicesCache.find { it.devId == action.devId }
 
-            // HANYA update jika status saat ini berbeda dengan status target scene
             val currentStatusInt = if (targetDevice?.status == true) 1 else 0
             if (currentStatusInt != action.status) {
                 targetDevice?.roomId?.let { roomId ->
@@ -231,7 +241,6 @@ class SmartHomeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // START_STICKY: Jika sistem membunuh service, service akan direstart otomatis
         return START_STICKY
     }
 

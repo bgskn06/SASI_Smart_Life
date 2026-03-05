@@ -7,8 +7,10 @@ data class SmartScene(
     val sceneId: String = "",
     val homeId: String = "",
     val name: String = "",
+    val category: String = "",
     val isActive: Boolean = true,
-    val ifData: SceneCondition = SceneCondition(),
+    val ifData: List<SceneCondition> = emptyList(),
+    val logic: String = "",
     val schedule: SceneSchedule = SceneSchedule(),
     val thenAction: List<SceneAction> = emptyList()
 )
