@@ -132,20 +132,28 @@ class FBDeviceRepository {
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val allDevices = snapshot.children.mapNotNull { childSnapshot ->
-                    val deviceData = childSnapshot.value as? MutableMap<String, Any>
-                    deviceData?.set("devId", childSnapshot.key ?: "")
-                    deviceData
+
+                val devices = snapshot.children.mapNotNull { childSnapshot ->
+                    val deviceData = childSnapshot.value as? Map<String, Any>
+                    deviceData?.toMutableMap()?.apply {
+                        put("devId", childSnapshot.key ?: "")
+                    }
                 }
-                val filteredList = allDevices.filter { it["homeId"] == homeId }
-                onComplete(filteredList)
+
+                onComplete(devices)
             }
-            override fun onCancelled(error: DatabaseError) { Log.e(tag, error.message) }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, error.message)
+            }
         }
 
-        // Simpan ke Map berdasarkan homeId
         deviceListenersMap[homeId] = listener
-        db.child("device").addValueEventListener(listener)
+
+        db.child("device")
+            .orderByChild("homeId")
+            .equalTo(homeId)
+            .addValueEventListener(listener)
     }
 
     fun removeDevicesListener() {

@@ -27,6 +27,24 @@ class FBSceneRepository {
             }
     }
 
+    fun updateScene(sceneId: String, updatedScene: SmartScene, onComplete: (Boolean) -> Unit) {
+
+        val updates = mapOf(
+            "name" to updatedScene.name,
+            "category" to updatedScene.category,
+            "ifData" to updatedScene.ifData,
+            "logic" to updatedScene.logic,
+            "schedule" to updatedScene.schedule,
+            "thenAction" to updatedScene.thenAction
+        )
+
+        db.child("scenes")
+            .child(sceneId)
+            .updateChildren(updates)
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
+    }
+
     fun getScenes(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {
         db.child("scenes").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {

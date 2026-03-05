@@ -663,6 +663,7 @@ class MainViewModel(
                     homeId = homeId,
                     isActive = m["isActive"] as? Boolean ?: true,
                     name = m["name"] as? String ?: "Unknown",
+                    category = m["category"] as? String ?: "",
                     ifData = (m["ifData"] as? List<Map<String, Any>>)?.map {
                         SceneCondition(
                             devId = it["devId"] as String,
@@ -711,6 +712,25 @@ class MainViewModel(
                     info = "Scene berhasil dibuat!"
                 )
                 loadScenes(currentHome.homeId)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Gagal menyimpan scene."
+                )
+            }
+        }
+    }
+
+    fun updateScene(scene: SmartScene) {
+        Log.d(tag, "updateScene: $scene")
+        val sceneId = scene.sceneId
+
+        sceneRepo.updateScene(sceneId ,scene) { success ->
+            if (success) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    info = "Scene berhasil diperbarui!"
+                )
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

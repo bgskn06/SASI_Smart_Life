@@ -14,7 +14,6 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        jcenter()
         maven { url = uri( "https://maven-other.tuya.com/repository/maven-releases/") }
         maven { url = uri( "https://maven-other.tuya.com/repository/maven-commercial-releases/") }
         maven { url = uri( "https://jitpack.io") }

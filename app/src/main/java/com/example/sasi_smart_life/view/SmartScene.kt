@@ -4,9 +4,7 @@ import android.app.TimePickerDialog
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -14,7 +12,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -27,25 +24,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.AutoMode
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DoubleArrow
 import androidx.compose.material.icons.filled.Input
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.RocketLaunch
@@ -83,17 +74,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -117,22 +103,32 @@ fun SmartScene(
     sceneList: List<SmartScene>,
     categories: List<DeviceCategory>
 ) {
-//    Image(
-//        painter = painterResource(id = R.drawable.maintenance),
-//        contentDescription = "Under Maintenance",
-//        modifier = Modifier.fillMaxSize()
-//    )
     var showDialog by remember { mutableStateOf(false) }
+    var editDialog by remember { mutableStateOf(false) }
+    var selectedScene by remember { mutableStateOf<SmartScene?>(null) }
     var sceneToDelete by remember { mutableStateOf<SmartScene?>(null) }
 
     if (showDialog) {
-        AddScene(
+        DialogFormScene (
             devices = device,
             category = categories,
             onDismiss = { showDialog = false },
             onSave = { newScene ->
                 viewModel.addScene(newScene)
                 showDialog = false
+            }
+        )
+    }
+
+    if (editDialog) {
+        DialogFormScene(
+            devices = device,
+            category = categories,
+            scene = selectedScene,
+            onDismiss = { editDialog = false },
+            onSave = { newScene ->
+                viewModel.updateScene(newScene)
+                editDialog = false
             }
         )
     }
@@ -197,7 +193,12 @@ fun SmartScene(
                         onToggle = { isActive ->
                             viewModel.toggleSceneActive(scene.sceneId, isActive)
                         },
-                        onLongClick = { sceneToDelete = scene }
+                        onLongClick = { sceneToDelete = scene },
+                        onClick = {
+                            editDialog = true
+                            selectedScene = scene
+                        }
+
                     )
                 }
             }
@@ -224,7 +225,8 @@ fun SceneCard(
     devices: List<Device>,
     categories: List<DeviceCategory>,
     onToggle: (Boolean) -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onClick: () -> Unit
 ) {
     fun getDeviceName(devId: String?): String {
         return devices.find { it.devId == devId }?.name ?: "?"
@@ -241,7 +243,7 @@ fun SceneCard(
             .fillMaxWidth()
             .heightIn(min = 140.dp)
             .combinedClickable(
-                onClick = {},
+                onClick = onClick,
                 onLongClick = onLongClick
             ),
         colors = CardDefaults.cardColors(containerColor = sasiColor.blue50),
@@ -264,7 +266,9 @@ fun SceneCard(
                 Row (
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -292,7 +296,9 @@ fun SceneCard(
                     Switch(
                         checked = scene.isActive,
                         onCheckedChange = { onToggle(scene.isActive) },
-                        modifier = Modifier.scale(0.7f).height(24.dp),
+                        modifier = Modifier
+                            .scale(0.7f)
+                            .height(24.dp),
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = sasiColor.purple500,
@@ -322,7 +328,9 @@ fun SceneCard(
                         )
 
                         Row(
-                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
@@ -359,7 +367,9 @@ fun SceneCard(
                         )
 
                         Row(
-                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
@@ -490,26 +500,37 @@ fun mapSelectedDaysToSchedule(selectedDays: Set<Int>): Map<String, Boolean> {
 }
 
 @Composable
-fun AddScene(
+fun DialogFormScene(
     devices: List<Device>,
     onDismiss: () -> Unit,
+    scene: SmartScene? = null,
     category: List<DeviceCategory>,
     onSave: (SmartScene) -> Unit
 ) {
-    var sceneName by remember { mutableStateOf("") }
-    var selectedCategoryName by remember { mutableStateOf("General") }
-    var logicOperator by remember { mutableStateOf("AND") }
+    val isEdit = scene != null
 
-    var ifConditions = remember { mutableStateListOf(SceneCondition())}
+    var sceneName by remember { mutableStateOf(scene?.name ?: "") }
+    var selectedCategoryName by remember { mutableStateOf(scene?.category ?: "General") }
+    var logicOperator by remember { mutableStateOf(scene?.logic ?: "AND") }
 
-    var isTimeEnabled by remember { mutableStateOf(false) }
-    var startTime by remember { mutableStateOf("00:00") }
-    var endTime by remember { mutableStateOf("00:00") }
+    val ifConditions = remember {
+        mutableStateListOf<SceneCondition>().apply {
+            addAll(scene?.ifData ?: listOf(SceneCondition()))
+        }
+    }
+
+    var isTimeEnabled by remember { mutableStateOf(scene?.schedule?.enabled ?: false) }
+    var startTime by remember { mutableStateOf(scene?.schedule?.startTime ?: "00:00") }
+    var endTime by remember { mutableStateOf(scene?.schedule?.endTime ?: "00:00") }
     var selectedDays by rememberSaveable {
         mutableStateOf(setOf(1,2,3,4,5,6,7))
     }
 
-    var thenActions = remember { mutableStateListOf(SceneAction())}
+    val thenActions = remember {
+        mutableStateListOf<SceneAction>().apply {
+            addAll(scene?.thenAction ?: listOf(SceneAction()))
+        }
+    }
 
     data class SceneCategoryItem(
         val name: String,
@@ -554,7 +575,11 @@ fun AddScene(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Add New Scene", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            if(isEdit) "Edit Scene" else "Add New Scene",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.Default.Close, contentDescription = "Close")
                         }
@@ -723,16 +748,27 @@ fun AddScene(
                             val validIf = ifConditions.filter { it.devId.isNotEmpty() }
                             val validThen = thenActions.filter { it.devId.isNotEmpty() }
                             if (validIf.isNotEmpty() && validThen.isNotEmpty()) {
-                                onSave(SmartScene(
-                                    sceneId = System.currentTimeMillis().toString(),
+                                val newScene = SmartScene(
+                                    sceneId = scene?.sceneId
+                                        ?: System.currentTimeMillis().toString(),
+                                    homeId = scene?.homeId ?: "",
                                     name = sceneName,
-                                    isActive = true,
+                                    isActive = scene?.isActive ?: true,
                                     category = selectedCategoryName,
                                     ifData = validIf,
                                     logic = logicOperator,
-                                    schedule = SceneSchedule(isTimeEnabled, startTime, endTime, mapSelectedDaysToSchedule(selectedDays)),
+
+                                    schedule = SceneSchedule(
+                                        isTimeEnabled,
+                                        startTime,
+                                        endTime,
+                                        mapSelectedDaysToSchedule(selectedDays)
+                                    ),
+
                                     thenAction = validThen
-                                ))
+                                )
+
+                                onSave(newScene)
                             }
                         },
                         modifier = Modifier
@@ -741,7 +777,10 @@ fun AddScene(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(sasiColor.purple500)
                     ) {
-                        Text("SAVE SCENE", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEdit) "UPDATE SCENE" else "SAVE SCENE",
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -816,7 +855,9 @@ fun ActionRow(
 
 @Composable
 fun LogicToggle(selected: String, onSelect: (String) -> Unit) {
-    Row(modifier = Modifier.background(sasiColor.grey600, RoundedCornerShape(8.dp)).padding(2.dp)) {
+    Row(modifier = Modifier
+        .background(sasiColor.grey600, RoundedCornerShape(8.dp))
+        .padding(2.dp)) {
         listOf("AND", "OR").forEach { label ->
             val isSelected = selected == label
             Box(modifier = Modifier
@@ -865,7 +906,9 @@ fun OperatorDropdown(
             readOnly = true,
             label = { Text("Kondisi") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = sasiColor.purple500,
                 unfocusedBorderColor = sasiColor.black300
@@ -988,7 +1031,9 @@ fun StatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = sasiColor.purple500,
                 unfocusedBorderColor = sasiColor.black300
