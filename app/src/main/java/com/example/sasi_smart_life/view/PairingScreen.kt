@@ -489,7 +489,7 @@ fun PairingTuya(
 
                 Button(
                     onClick = {
-                        val homeId = appState.selectedHomeId?.tuyaHomeId ?: return@Button
+                        val homeId = appState.currentUser?.tuyaHomeId ?: return@Button
                         tuyaViewModel.getApModeToken(homeId) { success ->
                             isTokenReady = success
                         }
@@ -527,7 +527,7 @@ fun PairingTuya(
 
                 Button(
                     onClick = {
-                        val homeId = appState.selectedHomeId?.tuyaHomeId
+                        val homeId = appState.currentUser?.tuyaHomeId
                         if (homeId == null) {
                             Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
                             return@Button
@@ -569,14 +569,14 @@ fun PairingTuya(
             )
             Button(
                 onClick = {
-                    val homeId = appState.selectedHomeId?.tuyaHomeId
+                    val homeId = appState.currentUser?.tuyaHomeId
                     if (homeId == null) {
                         Toast.makeText(context, "No home selected", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
 
 
-                    tuyaViewModel.startPairing(context, homeId,  ssid, password,useAPMode) { deviceBean ->
+                    tuyaViewModel.startPairing(context, homeId, ssid, password, useAPMode) { deviceBean ->
                         val dpsMap = deviceBean.dps ?: emptyMap<String, Any>()
                         mainViewModel.addDevice(
                             devId = deviceBean.devId,
@@ -589,7 +589,6 @@ fun PairingTuya(
                             ip = deviceBean.ip,
                             mac = deviceBean.mac,
                             initialDps = dpsMap
-
                         )
                     }
                 },

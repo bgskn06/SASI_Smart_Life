@@ -6,19 +6,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.sasi_smart_life.data.repository.FBDeviceRepository
 import com.example.sasi_smart_life.data.repository.TuyaPairingRepository
-import com.google.firebase.database.FirebaseDatabase
 import com.thingclips.smart.home.sdk.ThingHomeSdk
-import com.thingclips.smart.home.sdk.api.IThingHomeStatusListener
-import com.thingclips.smart.home.sdk.bean.HomeBean
-import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
-import com.thingclips.smart.sdk.api.IDevListener
+import com.thingclips.smart.sdk.api.IResultCallback
 import com.thingclips.smart.sdk.api.WifiSignalListener
 import com.thingclips.smart.sdk.bean.DeviceBean
 import com.thingclips.smart.sdk.enums.ActivatorModelEnum
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 enum class PairingStep {
     IDLE, GET_TOKEN, SCANNING, CONNECTING, SUCCESS, ERROR
@@ -172,175 +167,52 @@ class TuyaViewModel : ViewModel() {
 
 
     // ===========================
-    //          LISTENER
+    //      CONTROL DEVICE
     // ===========================
-    private var currentListeningHomeId: Long? = null
-    private val activeListeners = mutableMapOf<String, IDevListener>()
-    private val localDeviceCache = mutableMapOf<String, MutableMap<String, Any>>()
-    private val deviceCategoryMap = mutableMapOf<String, String>()
 
-    private var homeStatusListener: IThingHomeStatusListener? = null
+    fun controlDevice(devId: String, dpId: String, value: Int) {
+        val isMqttConnected = ThingHomeSdk.getServerInstance().isServerConnect()
+        Log.d(tag, "MQTT connected: $isMqttConnected")
 
-    fun startListeningToHome(homeId: Long) {
-        val cachedHomeBean = ThingHomeSdk.getDataInstance().getHomeBean(homeId)
-        if (cachedHomeBean != null) {
-            Log.d(tag, "🚀 Menggunakan Cache Device List untuk Listener Awal")
-            registerAllDevices(cachedHomeBean.deviceList)
+        if (!isMqttConnected) {
+            Log.e(tag, "Device is not connected to the server.")
+            return
         }
 
-        val homeInstance = ThingHomeSdk.newHomeInstance(homeId)
-        homeInstance.getHomeDetail(object : IThingHomeResultCallback {
-            override fun onSuccess(bean: HomeBean?) {
-                if (bean != null) {
-                    Log.d(tag, "✅ Data Home Terupdate dari Server")
-                    registerAllDevices(bean.deviceList)
+        val mDevice = ThingHomeSdk.newDeviceInstance(devId)
+
+        try {
+            val dps = "{\"$dpId\": $value}"
+
+            mDevice.publishDps(dps, object : IResultCallback {
+                override fun onError(code: String, error: String?) {
+                    Log.e(tag, "Error updating DP: $code, ${error ?: "Unknown error"}")
                 }
+
+                override fun onSuccess() {
+                    Log.d(tag, "Successfully updated dp $dpId to $value")
+                    getDP(devId, dpId)
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(tag, "Error: ${e.message}")
+        }
+    }
+
+    fun getDP(devId: String, dpId: String){
+        val mDevice = ThingHomeSdk.newDeviceInstance(devId)
+        val device = ThingHomeSdk.getDataInstance().getDeviceBean(devId)
+
+        mDevice.getDp(dpId, object : IResultCallback {
+            override fun onError(code: String, error: String?) {
+                Log.e(tag, "Error getting DP $dpId: $code, ${error ?: "Unknown error"}")
             }
-            override fun onError(code: String?, error: String?) {
-                Log.e(tag, "Gagal refresh home: $error")
+
+            override fun onSuccess() {
+                val currentValue = device?.dps[dpId]
+                Log.d(tag, "Successfully got DP $dpId value: $currentValue")
             }
         })
-
-        if (homeStatusListener == null) {
-            homeStatusListener = object : IThingHomeStatusListener {
-                override fun onDeviceAdded(devId: String?) {
-                    if(devId != null) registerListenerForDevice(devId)
-                }
-                override fun onDeviceRemoved(devId: String?) {
-                }
-                override fun onGroupAdded(groupId: Long) {}
-                override fun onGroupRemoved(groupId: Long) {}
-                override fun onMeshAdded(meshId: String?) {}
-            }
-            homeInstance.registerHomeStatusListener(homeStatusListener)
-        }
-    }
-
-    private fun registerAllDevices(devices: List<DeviceBean>?) {
-        devices?.forEach { dev ->
-            if (!activeListeners.containsKey(dev.devId)) {
-                registerListenerForDevice(dev.devId)
-
-                val cat = dev.productBean.category ?: "unknown"
-                deviceCategoryMap[dev.devId] = cat
-
-                if (!userMappingCache.containsKey(dev.devId)) {
-                    deviceRepo.observeUserMapping(dev.devId) { mapping ->
-                        userMappingCache[dev.devId] = mapping
-                    }
-                }
-            }
-        }
-    }
-
-    private fun registerListenerForDevice(devId: String) {
-        if (activeListeners.containsKey(devId)) return
-
-        val iDevice = ThingHomeSdk.newDeviceInstance(devId) ?: return
-
-        val listener = object : IDevListener {
-
-            override fun onDpUpdate(devId: String, dpStr: String) {
-                Log.w(tag, "devId : $devId Update: $dpStr")
-                filterDp(devId, dpStr)
-            }
-
-            override fun onStatusChanged(devId: String, online: Boolean) {
-                Log.d(tag, "Status Cloud Device $devId: $online")
-                updateOnlineStatus(devId, online)
-            }
-
-            override fun onNetworkStatusChanged(devId: String, status: Boolean) {
-                Log.d(tag, "Status Network Device $devId: $status")
-                updateOnlineStatus(devId, status)
-            }
-
-            override fun onDevInfoUpdate(devId: String) {
-            }
-
-            override fun onRemoved(devId: String) {
-                Log.d(tag, "Device Removed: $devId")
-                activeListeners.remove(devId)
-            }
-
-            private fun updateOnlineStatus(devId: String, status: Boolean){
-                deviceRepo.updateOnline(devId, status)
-            }
-        }
-
-        iDevice.registerDevListener(listener)
-
-        activeListeners[devId] = listener
-    }
-
-    private val userMappingCache = mutableMapOf<String, Map<String, String>>()
-    private fun filterDp(devId: String, dpStr: String) {
-        try {
-            val json = JSONObject(dpStr)
-
-            val currentData = localDeviceCache.getOrPut(devId) { mutableMapOf() }
-            val changes = mutableMapOf<String, Any>()
-            var category = deviceCategoryMap[devId]
-            val now = System.currentTimeMillis()
-            val dateFormat = java.text.SimpleDateFormat("dd MMM HH:mm:ss", java.util.Locale.getDefault())
-            val waktu = dateFormat.format(java.util.Date(now))
-
-            val keys = json.keys()
-            while (keys.hasNext()) {
-                val dpId = keys.next()
-                val newValue = json.get(dpId)
-                val oldValue = currentData[dpId]
-
-                currentData[dpId] = newValue
-                changes["tuyaInfo/dps/$dpId"] = newValue
-
-                when (category) {
-                    "mcs" -> { // Door Sensor
-                        if (newValue != oldValue && dpId == "1") {
-                            val isOpen = newValue.toString().toBoolean()
-                            changes["status"] = if (isOpen) 0 else 1
-                            val historyMap = mapOf(
-                                "status" to (if (isOpen) "OPEN" else "CLOSE"),
-                                "description" to (if (isOpen) "Pintu Terbuka" else "Pintu Tertutup"),
-                                "time" to waktu
-                            )
-                            deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
-//                            printHistory(devId, historyMap)
-                        }
-                        if (newValue != oldValue && dpId == "2") {
-                            val battLevel = newValue.toString().toDoubleOrNull()?.toInt() ?: 0
-                            changes["tuyaInfo/batt"] = battLevel
-                        }
-                    }
-                    "ms" -> { // Smart Lock
-                        if (json.length() == 1 || newValue != oldValue) {
-                            if(dpId == "1" || dpId == "2" || dpId == "5"){
-                                val userId = newValue.toString()
-                                val deviceKamus = userMappingCache[devId] ?: emptyMap()
-                                val finalName = deviceKamus[userId] ?: "Unknown ID ($userId)"
-                                val historyMap = mapOf(
-                                    "status" to "OPEN",
-                                    "method" to if(dpId == "1") "FINGERPRINT" else if (dpId == "2") "PASSWORD" else  "CARD",
-                                    "description" to "Dibuka oleh $finalName",
-                                    "userId" to userId,
-                                    "time" to waktu
-                                )
-                                deviceRepo.addLogHistory(devId, historyMap, timestampId = now)
-//                                printHistory(devId,  historyMap)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (changes.isNotEmpty()) {
-//                printLog(devId, changes)
-                deviceRepo.updateDp(devId,changes)
-            }
-
-        } catch (e: Exception) {
-            Log.e(tag, "Parse Error", e)
-        }
     }
 
     private fun printHistory(devId: String, logData: Map<String, Any>) {
@@ -383,15 +255,15 @@ class TuyaViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         stopPairing()
-        stopAllListeners()
+//        stopAllListeners()
     }
 
-    private fun stopAllListeners() {
-        activeListeners.forEach { (devId) ->
-            val iDevice = ThingHomeSdk.newDeviceInstance(devId)
-            iDevice?.unRegisterDevListener()
-        }
-        activeListeners.clear()
-        Log.d(tag, "Semua listener dibersihkan")
-    }
+//    private fun stopAllListeners() {
+//        activeListeners.forEach { (devId) ->
+//            val iDevice = ThingHomeSdk.newDeviceInstance(devId)
+//            iDevice?.unRegisterDevListener()
+//        }
+//        activeListeners.clear()
+//        Log.d(tag, "Semua listener dibersihkan")
+//    }
 }

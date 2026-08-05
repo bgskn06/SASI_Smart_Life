@@ -24,13 +24,17 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fingerprint
@@ -42,6 +46,8 @@ import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.SignalWifi4Bar
 import androidx.compose.material.icons.filled.SignalWifiOff
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,8 +66,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.rememberTimePickerState
@@ -77,6 +85,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +106,12 @@ import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import com.example.sasi_smart_life.viewModel.TuyaViewModel
 import com.example.sasi_smart_life.viewModel.WifiSignalUiState
+import com.thingclips.smart.call.module.api.util.ThingCallModuleUtil.Companion.currentTime
+import com.thingclips.smart.home.sdk.ThingHomeSdk
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 // Data class to hold context for the Time Picker
 data class TimePickerContext(val day: String, val type: String) // type can be "On" or "Off"
@@ -234,17 +249,19 @@ fun DetailDeviceDialog(
                                 color = sasiColor.black300,
                             )
                             if (device.isTuya) {
-                                Row {
-                                    Text(
-                                        text = "MAC: ${currentDevice.tuyaInfo?.mac}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = sasiColor.black300,
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Button(onClick = { tuyaViewModel.checkWifiSignal(currentDevice.devId) }) {
-                                        Text("Cek Sinyal Wifi")
-                                    }
-                                }
+                                Text(
+                                    text = "MAC: ${currentDevice.tuyaInfo?.mac}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = sasiColor.black300,
+                                )
+                                Text(
+                                    text = "DevId: ${currentDevice.devId}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = sasiColor.black300,
+                                )
+//                                Button(onClick = { tuyaViewModel.checkWifiSignal(currentDevice.devId) }) {
+//                                    Text("Cek Sinyal Wifi")
+//                                }
                             }
                         }
                         Card(
@@ -334,7 +351,9 @@ fun DetailDeviceDialog(
                                 .padding(horizontal = 12.dp),)
                         Spacer(modifier = Modifier.width(8.dp))
                         if (device.isTuya){
-                            if(device.tuyaInfo?.category == "ms" ){
+                            if(device.tuyaInfo?.category == "ms" ||
+                                device.tuyaInfo?.category == "mk"
+                                ){
                                 Text(
                                     "Access",
                                     style = MaterialTheme.typography.bodySmall,
@@ -347,6 +366,25 @@ fun DetailDeviceDialog(
                                             BorderStroke(
                                                 1.dp,
                                                 if (selectedTab == "Access") Color.Transparent else sasiColor.grey600
+                                            ),
+                                            buttonShape
+                                        )
+                                        .padding(horizontal = 12.dp)
+                                )
+                            }
+                            if(device.tuyaInfo?.category == "wsdcg" ){
+                                Text(
+                                    "Setting",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selectedTab == "Setting") sasiColor.blue50 else sasiColor.black300,
+                                    modifier = Modifier
+                                        .clip(buttonShape)
+                                        .clickable { selectedTab = "Setting" }
+                                        .background(if (selectedTab == "Setting") sasiColor.blue500 else Color.Transparent)
+                                        .border(
+                                            BorderStroke(
+                                                1.dp,
+                                                if (selectedTab == "Setting") Color.Transparent else sasiColor.grey600
                                             ),
                                             buttonShape
                                         )
@@ -394,7 +432,9 @@ fun DetailDeviceDialog(
                 }
 
                 if (selectedTab == "Information" && currentDevice.isTuya == true) {
-                    if(currentDevice.tuyaInfo?.category == "ms"){
+                    if (currentDevice.tuyaInfo?.category == "ms" ||
+                        currentDevice.tuyaInfo?.category == "mk"
+                    ) {
                         SmartLockInformation(
                             device = currentDevice,
                             viewModel = viewModel
@@ -406,6 +446,12 @@ fun DetailDeviceDialog(
                             viewModel = viewModel
                         )
                     }
+                    if(currentDevice.tuyaInfo?.category == "wsdcg"){
+                        TempSensorInformation(
+                            device = currentDevice,
+                            viewModel = viewModel
+                        )
+                    }
                 } else if (selectedTab == "Information") {
                     InformationTabContent(
                         modifier = Modifier.weight(1f),
@@ -413,6 +459,15 @@ fun DetailDeviceDialog(
                         categories = categories,
                         viewModel = viewModel
                     )
+                }
+
+                if(selectedTab == "Setting"){
+                    if(currentDevice.tuyaInfo?.category == "wsdcg"){
+                        TempSensorSetting(
+                            device = currentDevice,
+                            viewModel = tuyaViewModel
+                        )
+                    }
                 }
 
                 if(selectedTab == "Access"){
@@ -979,7 +1034,6 @@ fun SmartLockInformation(
         viewModel.listenToSmartLockLogs(device.devId)
     }
 
-    // 2. Ambil Data
     val logs by viewModel.smartLockLogs.collectAsState()
 
     Column(
@@ -988,7 +1042,6 @@ fun SmartLockInformation(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- List History ---
         if (logs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Belum ada riwayat akses", color = Color.Gray)
@@ -1018,7 +1071,6 @@ fun SmartLockLogItem(log: SmartLockLog) {
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. IKON (Berdasarkan Method)
             val iconConfig = when (log.method) {
                 "CARD" -> Pair(Icons.Default.CreditCard, Color(0xFF3F51B5))
                 "FINGERPRINT" -> Pair(Icons.Default.Fingerprint, Color(0xFFE91E63))
@@ -1120,13 +1172,12 @@ fun AccessTabContent(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(3), // 🔥 Request Anda: 3 Kolom
+                columns = GridCells.Fixed(3),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
                     .padding(vertical = 12.dp)
             ) {
-                // Kita ubah Map jadi List agar bisa masuk ke items()
                 items(userMap.toList()) { (userId, userName) ->
                     UserGridItem(
                         userId = userId,
@@ -1391,6 +1442,158 @@ fun DoorSensorLogItem(log: DoorSensorLog) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun TempSensorInformation(
+    device: Device,
+    viewModel: MainViewModel
+) {
+    var currentTime by remember { mutableStateOf("") }
+    var currentDayOfWeek by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val cal = Calendar.getInstance()
+            currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(cal.time)
+            currentDayOfWeek = SimpleDateFormat("EEEE", Locale.getDefault()).format(cal.time)
+            delay(1000)
+        }
+    }
+
+    val temp = device.tuyaInfo?.temp.toString()
+    val hum = device.tuyaInfo?.humidity.toString()
+
+    Card(
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier = Modifier
+            .fillMaxWidth(),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = currentDayOfWeek, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(text = currentTime, fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "$temp °C",
+                        fontSize = 64.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.Default.Cloud,
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp),
+                    tint = Color(0xFF90CAF9)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                WeatherStatItem(
+                    label = "Temperature",
+                    value = "$temp °C",
+                    icon = Icons.Default.Thermostat,
+                    modifier = Modifier.weight(1f)
+                )
+                WeatherStatItem(
+                    label = "Humidity",
+                    value = "$hum %",
+                    icon = Icons.Default.WaterDrop,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun WeatherStatItem(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    isHighlighted: Boolean = false
+) {
+    Surface(
+        modifier = modifier.height(110.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = if (isHighlighted) Color(0xFFD1E9FF) else Color(0xFFF3F7FA)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column {
+                Text(text = label, fontSize = 12.sp, color = Color.Gray)
+                Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+fun TempSensorSetting(
+    device: Device,
+    viewModel: TuyaViewModel
+) {
+    var periodicTime by remember { mutableStateOf("60") }
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text("Set Periodic Report Interval (seconds)", style = MaterialTheme.typography.titleSmall)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextField(
+            value = periodicTime,
+            onValueChange = { newValue ->
+                periodicTime = newValue
+            },
+            label = { Text("Interval (in sec)") },
+            keyboardOptions = KeyboardOptions.Default.copy(
+                keyboardType = KeyboardType.Number
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                val dpId = "17"
+                val value = periodicTime.toInt()
+                viewModel.controlDevice(device.devId, dpId, value)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Save Settings")
         }
     }
 }

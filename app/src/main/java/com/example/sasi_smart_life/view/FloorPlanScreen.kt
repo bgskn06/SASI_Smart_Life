@@ -1,6 +1,13 @@
 package com.example.sasi_smart_life.view
 
+import android.util.Log
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -33,15 +40,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Size
 import com.example.sasi_smart_life.R
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceNode
@@ -189,6 +205,29 @@ fun FloorPlanScreen(
     }
 }
 
+//Helper Ukuran Icon
+fun getDeviceSize(categoryName: String?): Dp {
+    return when (categoryName) {
+        "Wooden Lamp" -> 72.dp
+        "Leather Lamp" -> 52.dp
+        "Stop Kontak" -> 9.dp
+        "Lampu KMI" -> 148.dp
+        "Street Lamp" -> 128.dp
+        "Spot Lamp" -> 24.dp
+        "Door Sensor" -> 28.dp
+        "Lampu Taman" -> 92.dp
+        "Limasan", "Mushola" -> 240.dp
+        "Kandang Kebo", "Stage" -> 180.dp
+        "Layar" -> 144.dp
+        "Lampu Sorot" -> 18.dp
+        "Sensor Gerbang" -> 172.dp
+        "Lampu Highbay" -> 52.dp
+        "Door Sensor Gerbang" -> 118.dp
+        "Door Sensor Gerbang 2" -> 144.dp
+        else -> 36.dp
+    }
+}
+
 @Composable
 private fun DraggableNodeIcon(
     device: Device,
@@ -202,7 +241,14 @@ private fun DraggableNodeIcon(
 
     val appState by viewModel.uiState.collectAsState()
     val category = appState.categories.find { it.categoryId == node.categoryId }
-    val imageUrl = if (device.status) category?.imageUrlOn else category?.imageUrlOff
+    val imageUrl = if (device.status) {
+        category?.imageUrlOn
+    } else {
+        category?.imageUrlOff
+    }
+
+    val size = getDeviceSize(category?.name)
+    val scaleX = if (node.mirror) -1f else 1f
 
     val dragModifier = if (!isLock) {
         Modifier.pointerInput(node.id) {
@@ -240,51 +286,121 @@ private fun DraggableNodeIcon(
                     }
                 }
             }
-            .rotate(node.rotation)
     ) {
-        Box {
-            val scaleX = if (node.mirror) -1f else 1f
-            AsyncImage(
-                model = imageUrl,
-                placeholder = painterResource(id = R.drawable.logo_sag),
-                error = painterResource(id = R.drawable.scene_empty),
+        Box(
+            modifier = Modifier.rotate(node.rotation)
+        ) {
+            DeviceImage(
+                imageUrl = imageUrl,
                 contentDescription = device.name,
-                modifier = Modifier
-                    .size(if (category?.name == "Wooden Lamp") 72.dp
-                    else if(category?.name == "Leather Lamp") 52.dp
-                    else if(category?.name == "Stop Kontak") 9.dp
-                    else if(category?.name == "Lampu KMI") 148.dp
-                    else if(category?.name == "Street Lamp") 128.dp
-                    else if(category?.name == "Spot Lamp") 24.dp
-                    else if(category?.name == "Door Sensor") 28.dp
-                    else if(category?.name == "Lampu Taman") 92.dp
-                    else if(category?.name == "Limasan") 240.dp
-                    else if(category?.name == "Kandang Kebo") 180.dp
-                    else if(category?.name == "Mushola") 240.dp
-                    else if(category?.name == "Stage") 180.dp
-                    else if(category?.name == "Layar") 144.dp
-                    else if(category?.name == "Lampu Sorot") 18.dp
-                    else if(category?.name == "Sensor Gerbang") 172.dp
-                    else 36.dp)
-                    .scale(scaleX = scaleX, scaleY = 1f)
+                size = size,
+                scaleX = scaleX
             )
-            if (isBeingDragged) {
-                Text(
-                    text = device.name,
+        }
+        if (isBeingDragged) {
+            Text(
+                text = device.name,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = -28.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = sasiColor.grey50
+            )
+        }
+    }
+}
+
+@Composable
+fun ShimmerBox(
+    modifier: Modifier = Modifier
+) {
+    val shimmerColors = listOf(
+        Color.LightGray.copy(alpha = 0.6f),
+        Color.LightGray.copy(alpha = 0.2f),
+        Color.LightGray.copy(alpha = 0.6f),
+    )
+
+    val transition = rememberInfiniteTransition(label = "")
+
+    val translateAnim = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 800f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = ""
+    )
+
+    val brush = Brush.linearGradient(
+        colors = shimmerColors,
+        start = Offset.Zero,
+        end = Offset(translateAnim.value, translateAnim.value)
+    )
+
+    Box(
+        modifier = modifier.background(brush)
+    )
+}
+
+@Composable
+fun DeviceImage(
+    imageUrl: String?,
+    contentDescription: String?,
+    size: Dp,
+    scaleX: Float
+) {
+    var isLoading by remember { mutableStateOf(true) }
+    var isError by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    val model = remember(imageUrl) {
+        ImageRequest.Builder(context)
+            .data(imageUrl)
+            .crossfade(true)
+            .size(Size.ORIGINAL)
+            .build()
+    }
+
+
+    Box(
+        modifier = Modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+
+        AsyncImage(
+            model = model,
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(scaleX, 1f),
+            onState = { state ->
+                isLoading = state is AsyncImagePainter.State.Loading
+//                isError = state is AsyncImagePainter.State.Error
+            }
+        )
+
+        when {
+            isLoading -> {
+                ShimmerBox(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = -28.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = sasiColor.grey50
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
+
+            isError -> {
+                Image(
+                    painter = painterResource(R.drawable.scene_empty),
+                    contentDescription = "error"
                 )
             }
         }
     }
 }
-
-// DraggableDeviceIcon has been removed.
 
 @Composable
 private fun DraggableRoomLabel(

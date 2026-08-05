@@ -30,6 +30,7 @@ class MainViewModel(
     private val sceneRepo: FBSceneRepository,
     private val categoryRepo: FBCategoryRepository,
     private val tuyaAuthRepo: TuyaAuthRepository,
+    private val tuyaViewModel: TuyaViewModel
 ) : ViewModel() {
 
 
@@ -46,26 +47,35 @@ class MainViewModel(
     init {
         auth.addAuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
-
             if (user != null) {
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
                     info = "Logged in Firebase as ${user.email}. Connecting to Tuya..."
                 )
-
-                // --- SHADOW LOGIN KE TUYA ---
                 val uid = user.uid
                 tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
                     if (success) {
-                        Log.d(tag, "Tuya Login Success!")
-                        loadAllData()
+                        tuyaAuthRepo.getUserHomeId(uid) { homeId ->
+                            if (homeId == 0L) {
+                                tuyaAuthRepo.createHome("My Home") { newHomeId, createError ->
+                                    if (newHomeId != 0L) {
+                                        tuyaAuthRepo.updateTuyaHomeId(uid, newHomeId) {
+                                            loadAllData()
+                                        }
+                                    } else {
+                                        Log.e(tag, "Gagal membuat home: $createError")
+                                    }
+                                }
+                            } else {
+                                loadAllData()
+                            }
+                        }
                     } else {
                         Log.e(tag, "Tuya Login Failed: $error")
-                        _uiState.value = _uiState.value.copy(error = "Tuya Error: $error")
                     }
                 }
-
-            } else {
+            }
+            else {
                 tuyaAuthRepo.logout()
                 _uiState.value = AppState(isLoggedIn = false)
             }
@@ -134,7 +144,6 @@ class MainViewModel(
                     name = m["name"] as? String ?: "",
                     ownerUid = m["ownerUid"] as? String ?: "",
                     imageUrl = m["image"] as? String ?: "",
-                    tuyaHomeId = (m["tuyaHomeId"] as? Number)?.toLong() ?: 0L
                 )
             }
 
@@ -144,13 +153,12 @@ class MainViewModel(
                 _uiState.value = _uiState.value.copy(
                     homes = homes,
                     selectedHomeId = if (needsSelection) homes.first() else _uiState.value.selectedHomeId,
-                    error = null // Hapus error sebelumnya jika ada
+                    error = null
                 )
 
                 if (needsSelection) {
                     loadHomeChildData(homes.first().homeId)
                 }
-                syncExistingHomesWithTuya(homes)
 
             } else {
                 _uiState.value = _uiState.value.copy(error = "No homes found for this user.")
@@ -158,42 +166,42 @@ class MainViewModel(
         }
     }
 
-    private fun syncExistingHomesWithTuya(homes: List<Home>) {
-        val uid = auth.currentUser?.uid ?: return
-
-        homes.forEach { home ->
-            if (home.tuyaHomeId == 0L) {
-                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
-
-                ThingHomeSdk.getHomeManagerInstance().createHome(
-                    home.name,
-                    0.0, // lon default
-                    0.0, // lat default
-                    home.name, // geoName
-                    listOf("Default Room"), // Tuya wajib minimal 1 ruangan
-                    object : IThingHomeResultCallback {
-                        override fun onSuccess(bean: HomeBean?) {
-                            val newTuyaId = bean?.homeId
-                            if (newTuyaId != null) {
-                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
-
-                                homeRepo.updateTuyaHomeId(home.homeId, newTuyaId) { success ->
-                                    if (success) {
-                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
-                                        loadHomes(uid)
-                                    }
-                                }
-                            }
-                        }
-
-                        override fun onError(errorCode: String?, errorMsg: String?) {
-                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
-                        }
-                    }
-                )
-            }
-        }
-    }
+//    private fun syncExistingHomesWithTuya(homes: List<Home>) {
+//        val uid = auth.currentUser?.uid ?: return
+//
+//        homes.forEach { home ->
+//            if (home.tuyaHomeId == 0L) {
+//                Log.d(tag, "MIGRATION: Syncing home '${home.name}' to Tuya Cloud...")
+//
+//                ThingHomeSdk.getHomeManagerInstance().createHome(
+//                    home.name,
+//                    0.0, // lon default
+//                    0.0, // lat default
+//                    home.name, // geoName
+//                    listOf("Default Room"), // Tuya wajib minimal 1 ruangan
+//                    object : IThingHomeResultCallback {
+//                        override fun onSuccess(bean: HomeBean?) {
+//                            val newTuyaId = bean?.homeId
+//                            if (newTuyaId != null) {
+//                                Log.i(tag, "Tuya Home Created! ID: $newTuyaId. Updating Firebase...")
+//
+//                                homeRepo.updateTuyaHomeId(home.homeId, newTuyaId) { success ->
+//                                    if (success) {
+//                                        Log.i(tag, "SUCCESS: Home '${home.name}' is now linked (Firebase <-> Tuya)")
+//                                        loadHomes(uid)
+//                                    }
+//                                }
+//                            }
+//                        }
+//
+//                        override fun onError(errorCode: String?, errorMsg: String?) {
+//                            Log.e(tag, "Tuya Create Home Failed: $errorCode - $errorMsg")
+//                        }
+//                    }
+//                )
+//            }
+//        }
+//    }
 
     private fun listRoomNames(homeId: String): List<String> {
         return listOf("Default Room") // Tuya butuh minimal 1 ruangan saat create
@@ -262,7 +270,9 @@ class MainViewModel(
         onResult: (success: Boolean, error: String?) -> Unit
     ) {
         val homeName = _uiState.value.selectedHomeId?.name ?: "default"
-        val roomId = "room_${homeName}_${System.currentTimeMillis()}"
+        val safeHomeName = homeName.replace("\\s+".toRegex(), "_")
+
+        val roomId = "room_${safeHomeName}_${System.currentTimeMillis()}"
         roomRepo.createRoom(roomId, homeId, name, img) { success, error ->
             if (success) {
                 loadRooms(homeId)
@@ -402,7 +412,9 @@ class MainViewModel(
                         category = tuyaInfo["category"] as? String,
                         ip = tuyaInfo["ip"] as? String,
                         mac = tuyaInfo["mac"] as? String,
-                        batt = (tuyaInfo["batt"]?.toString())?.toDoubleOrNull()?.toInt()
+                        batt = (tuyaInfo["batt"]?.toString())?.toDoubleOrNull()?.toInt(),
+                        temp = (tuyaInfo["temperature"]?.toString()?.toDoubleOrNull()),
+                        humidity = (tuyaInfo["humidity"]?.toString())?.toInt()
                     )
                 } else {
                     null
@@ -458,6 +470,7 @@ class MainViewModel(
         initialDps: Map<String, Any> = emptyMap()
     ) {
         val roomName = _uiState.value.rooms.find { it.roomId == roomId }?.name ?: "default"
+        val safeRoomName = roomName.replace("\\s+".toRegex(), "_")
 
         val newDeviceId = if (isTuya && devId != null) {
             devId
@@ -465,7 +478,7 @@ class MainViewModel(
             val deviceCountInRoom = _uiState.value.devices.count { it.roomId == roomId }
             val nextDeviceNumber = deviceCountInRoom + 1
             val formattedDeviceNumber = String.format("%03d", nextDeviceNumber)
-            "dev_${roomName}_${formattedDeviceNumber}"
+            "dev_${safeRoomName}_${formattedDeviceNumber}"
         }
 
         val node = DeviceNode(

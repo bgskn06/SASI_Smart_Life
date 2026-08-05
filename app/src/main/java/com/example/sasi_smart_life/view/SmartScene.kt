@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -78,6 +79,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -764,10 +766,8 @@ fun DialogFormScene(
                                         endTime,
                                         mapSelectedDaysToSchedule(selectedDays)
                                     ),
-
                                     thenAction = validThen
                                 )
-
                                 onSave(newScene)
                             }
                         },
@@ -788,6 +788,7 @@ fun DialogFormScene(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConditionRow(
     devices: List<Device>,
@@ -798,7 +799,9 @@ fun ConditionRow(
 ) {
     val selectedDev = devices.find { it.devId == condition.devId }
     val cat = categories.find { it.categoryId == selectedDev?.category }
-    val isSuhu = cat?.name?.lowercase()?.contains("suhu") == true
+    val isSuhu = selectedDev?.name?.lowercase()?.contains("temperature") == true
+
+    var suhu by remember { mutableStateOf(condition.status) }
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.weight(0.5f)) {
@@ -806,8 +809,25 @@ fun ConditionRow(
         }
         Box(modifier = Modifier.weight(0.4f)) {
             if (isSuhu) {
-                // UI untuk Suhu (Operator + Value)
-                Row { /* Sama seperti kode lamamu tapi panggil onUpdate(condition.copy(...)) */ }
+                Row (
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = suhu.toString(),
+                        onValueChange = { newValue ->
+                            val intVal = newValue.toIntOrNull() ?: 0
+                            suhu = intVal
+                            onUpdate(condition.copy(status = intVal))
+                        },
+                        label = { Text("Value") },
+                        keyboardOptions = KeyboardOptions.Default.copy(
+                            keyboardType = KeyboardType.Number
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text("°C")
+                }
             } else {
                 StatusDropdown(
                     label = "Status",
@@ -887,7 +907,8 @@ fun SectionLabel(text: String) {
 @Composable
 fun OperatorDropdown(
     selectedOp: String,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    modifier: Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     val operators = listOf(
@@ -896,23 +917,23 @@ fun OperatorDropdown(
         "==" to "Sama dengan"
     )
 
+
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
             value = selectedOp,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Kondisi") },
+            label = { Text("") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = sasiColor.purple500,
                 unfocusedBorderColor = sasiColor.black300
-            )
+            ),
+            modifier = Modifier.fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -948,7 +969,6 @@ fun DeviceDropdown(
     }
     val selectedCategory = selected?.let { findCategoryForDevice(it) }
 
-
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
@@ -957,6 +977,7 @@ fun DeviceDropdown(
             value = selected?.name ?: "",
             onValueChange = {},
             readOnly = true,
+            singleLine = true,
             label = { Text(label) },
             leadingIcon = if (selectedCategory != null) {
                 {

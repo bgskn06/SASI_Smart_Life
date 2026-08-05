@@ -53,7 +53,6 @@ fun AuthScreen(viewModel: AuthViewModel, appState: AppState, onLoginSuccess: () 
     val authState by viewModel.authState.collectAsState()
     val context = LocalContext.current
 
-    // Pindah ke layar utama jika sudah login
     LaunchedEffect(appState.isLoggedIn) {
         if (appState.isLoggedIn) {
             onLoginSuccess()

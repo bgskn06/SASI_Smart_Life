@@ -35,8 +35,10 @@ class AuthViewModel : ViewModel() {
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         _authState.value = AuthState(isLoading = false, info = "Login successful.")
+                        Log.d(tag, "Login successful")
                     } else {
                         _authState.value = AuthState(isLoading = false, error = task.exception?.message)
+                        Log.e(tag, "Login Failed: ${task.exception?.message}")
                     }
                 }
         }

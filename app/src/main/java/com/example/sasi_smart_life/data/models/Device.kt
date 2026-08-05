@@ -29,7 +29,9 @@ data class TuyaInfo(
     val category: String? = null,
     val ip: String? = null,
     val mac: String? = null,
-    val batt: Int? = null
+    val batt: Int? = null,
+    val temp: Double? = null,
+    val humidity: Int? = null
 )
 
 data class Device(

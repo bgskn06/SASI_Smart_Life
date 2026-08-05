@@ -28,7 +28,6 @@ class FBSceneRepository {
     }
 
     fun updateScene(sceneId: String, updatedScene: SmartScene, onComplete: (Boolean) -> Unit) {
-
         val updates = mapOf(
             "name" to updatedScene.name,
             "category" to updatedScene.category,

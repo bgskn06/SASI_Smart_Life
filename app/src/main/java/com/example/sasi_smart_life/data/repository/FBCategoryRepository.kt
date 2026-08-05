@@ -19,7 +19,6 @@ class FBCategoryRepository {
     ) {
         Log.d("CATEGORY_SASI", "Attempting to create category. Name: $name, HomeID: $homeId")
         val categoryData = mapOf(
-            "categoryId" to categoryId,
             "name" to name,
             "homeId" to homeId,
             "image" to image,
@@ -27,7 +26,7 @@ class FBCategoryRepository {
             "imageUrlOff" to imageUrlOff
         )
 
-        db.child(name).setValue(categoryData)
+        db.child(categoryId).setValue(categoryData)
             .addOnSuccessListener {
                 Log.d("CATEGORY_SASI", "Successfully created category with ID: $categoryId")
                 onComplete(true, null)

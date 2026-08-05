@@ -28,6 +28,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sasi_smart_life.data.repository.FBUserRepository
 import com.example.sasi_smart_life.view.theme.SasiTheme
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import com.example.sasi_smart_life.viewModel.MainViewModelFactory
@@ -40,17 +41,28 @@ import com.google.firebase.auth.FirebaseAuth
 @OptIn(ExperimentalPermissionsApi::class)
 class MainActivity : ComponentActivity() {
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (FirebaseAuth.getInstance().currentUser != null) {
-            val serviceIntent = Intent(this, SmartHomeService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+
+        if (firebaseUser != null) {
+
+            val uid = firebaseUser.uid
+            val userRepo = FBUserRepository()
+            userRepo.getUser(uid) { user ->
+                val homeId = user?.tuyaHomeId ?: 0L
+                if (homeId != 0L) {
+                    val intent = Intent(this, SmartHomeService::class.java)
+                    intent.putExtra("TUYA_HOME_ID", homeId)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                }
             }
         }
+
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         enableEdgeToEdge()
         setContent {
@@ -74,9 +86,10 @@ fun SasiApp(viewModel: MainViewModel) {
 
     LaunchedEffect(appState.selectedHomeId?.homeId) {
         val selectedHome = appState.selectedHomeId
+        val activeUser = appState.currentUser
 
-        if (selectedHome != null && selectedHome.tuyaHomeId != 0L) {
-            tuyaViewModel.startListeningToHome(selectedHome.tuyaHomeId)
+        if (selectedHome != null && activeUser?.tuyaHomeId != 0L) {
+//            tuyaViewModel.startListeningToHome(selectedHome.tuyaHomeId)
         }
     }
 

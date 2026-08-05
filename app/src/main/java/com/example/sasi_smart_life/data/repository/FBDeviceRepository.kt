@@ -191,6 +191,7 @@ class FBDeviceRepository {
             .addOnFailureListener { e ->
                 Log.e(tag, "Gagal update DP $updates", e)
             }
+            .addOnSuccessListener { Log.d(tag, "Berhasil update DP $updates") }
     }
 
     fun updateOnline(devId: String, status: Boolean) {

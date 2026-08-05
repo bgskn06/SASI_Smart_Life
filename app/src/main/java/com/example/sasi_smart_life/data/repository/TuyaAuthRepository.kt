@@ -1,10 +1,16 @@
 package com.example.sasi_smart_life.data.repository
 
 import android.util.Log
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.thingclips.smart.android.user.api.ILoginCallback
 import com.thingclips.smart.android.user.api.IRegisterCallback
 import com.thingclips.smart.android.user.bean.User
 import com.thingclips.smart.home.sdk.ThingHomeSdk
+import com.thingclips.smart.home.sdk.bean.HomeBean
+import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
 
 class TuyaAuthRepository {
 
@@ -12,6 +18,7 @@ class TuyaAuthRepository {
     private val COUNTRY_CODE = "62"
     private val tag = "TuyaAuth_SASI"
 
+    private val db = FirebaseDatabase.getInstance("https://sasi-smart-life-default-rtdb.asia-southeast1.firebasedatabase.app/").reference
 
     fun loginOrRegisterTuya(
         uid: String,
@@ -82,5 +89,48 @@ class TuyaAuthRepository {
         if (ThingHomeSdk.getUserInstance().isLogin) {
             ThingHomeSdk.getUserInstance().logout(null)
         }
+    }
+
+    fun getUserHomeId(uid: String, callback: (homeId: Long) -> Unit) {
+        db.child("users").child(uid).child("tuyaHomeId")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val homeId: Long = snapshot.getValue(Long::class.java) ?: 0L
+                    callback(homeId)
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(tag, "Failed to get homeId: $error")
+                    callback(0L)
+                }
+            })
+    }
+
+    fun createHome(homeName: String, callback: (homeId: Long?, error: String?) -> Unit) {
+        ThingHomeSdk.getHomeManagerInstance().createHome(
+            homeName,
+            0.0, // lon default
+            0.0, // lat default
+            "", // geoName
+            listOf("Default Room"), // Tuya wajib minimal 1 ruangan
+            object : IThingHomeResultCallback {
+                override fun onSuccess(bean: HomeBean?) {
+                    callback(bean?.homeId, null)
+                }
+
+                override fun onError(errorCode: String?, errorMsg: String?) {
+                    callback(0L, errorMsg ?: "Unknown error")
+                }
+            }
+        )
+    }
+
+    fun updateTuyaHomeId(uid: String, homeId: Long?, callback: (success: Boolean) -> Unit) {
+        db.child("users").child(uid).child("tuyaHomeId").setValue(homeId)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { e ->
+                Log.e(tag, "Failed to update homeId: $e")
+                callback(false)
+            }
     }
 }
