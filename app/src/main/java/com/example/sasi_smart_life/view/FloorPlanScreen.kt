@@ -789,14 +789,13 @@ private fun RumahKampungDeviceCard(
                 ) {
 
                     Surface(
-
                         modifier = Modifier
-                            .size(92.dp),
+                            .size(82.dp),
 
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
 
-                        color = Color.White.copy(
-                            alpha = 0.82f
+                        color = Color.LightGray.copy(
+                            alpha = 0.75f
                         )
                     ) {
 
