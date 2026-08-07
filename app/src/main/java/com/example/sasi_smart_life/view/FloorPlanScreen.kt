@@ -68,6 +68,26 @@ import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import androidx.compose.material3.Switch
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButton
 
 @Composable
 fun FloorPlanScreen(
@@ -76,8 +96,16 @@ fun FloorPlanScreen(
 ) {
     val appState by viewModel.uiState.collectAsState()
 
+    // Hanya Home Rumah Kampung yang mendapatkan icon Rumah Kampung
+    val isRumahKampungHome =
+        appState.selectedHomeId?.homeId == "home_1772593337399"
+    val rumahKampungRoomId = "room_Taman_1778902444680"
+
     var showLocationDialog by remember { mutableStateOf(false) }
     var showAddLocationDialog by remember { mutableStateOf(false) }
+
+    var showRumahKampungDialog by remember { mutableStateOf(false) }
+
     var isLocked by remember { mutableStateOf(true) }
     var showLockButton by remember { mutableStateOf(false) }
 
@@ -88,43 +116,90 @@ fun FloorPlanScreen(
         }
     }
 
+    // =========================
+    // LOCATION DIALOG
+    // =========================
+
     if (showLocationDialog) {
         LocationSelectionDialog(
             homes = appState.homes,
             currentHomeId = appState.selectedHomeId?.homeId,
-            onDismissRequest = { showLocationDialog = false },
+
+            onDismissRequest = {
+                showLocationDialog = false
+            },
+
             onLocationSelected = { selectedHome ->
                 viewModel.selectHome(selectedHome)
                 showLocationDialog = false
             },
+
             onAddLocationClick = {
                 showLocationDialog = false
                 showAddLocationDialog = true
             },
+
             onSettingsClick = {
                 showLocationDialog = false
                 onNavigateToSettings(it)
             },
-            onLogoutClick = { viewModel.logout() }
+
+            onLogoutClick = {
+                viewModel.logout()
+            }
         )
     }
 
+    // =========================
+    // ADD LOCATION DIALOG
+    // =========================
+
     if (showAddLocationDialog) {
-        AddLocationDialog(onDismissRequest = { showAddLocationDialog = false },onSave = { name ->
-            viewModel.createHome(name)
-        })
+        AddLocationDialog(
+            onDismissRequest = {
+                showAddLocationDialog = false
+            },
+
+            onSave = { name ->
+                viewModel.createHome(name)
+                showAddLocationDialog = false
+            }
+        )
     }
+
+    if (showRumahKampungDialog) {
+        RumahKampungDeviceDialog(
+            devices = appState.devices.filter {
+                it.roomId == rumahKampungRoomId
+            },
+            categories = appState.categories,
+            viewModel = viewModel,
+            onDismiss = {
+                showRumahKampungDialog = false
+            }
+        )
+    }
+
+    // =========================
+    // MAIN SCREEN
+    // =========================
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+
+        // =========================
+        // HEADER
+        // =========================
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.15f)
         ) {
+
             Header(
                 viewModel = viewModel,
                 categories = appState.categories,
@@ -133,39 +208,92 @@ fun FloorPlanScreen(
                 error = appState.error,
                 roomCount = appState.rooms.count { it.isMap },
                 deviceCount = appState.devices.size,
-                onRoomNameClick = { showLocationDialog = true },
+
+                onRoomNameClick = {
+                    showLocationDialog = true
+                }
             )
         }
-        Spacer(modifier = Modifier.height(10.dp))
 
-        Box(modifier = Modifier
-            .fillMaxWidth()
-            .weight(0.85f)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { showLockButton = true } // Show button on any tap
-                )
-            }
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
+
+        // =========================
+        // FLOOR PLAN
+        // =========================
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(0.85f)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = {
+                            showLockButton = true
+                        }
+                    )
+                }
         ) {
+
+            // =========================
+            // GAMBAR FLOOR PLAN
+            // =========================
+
             AsyncImage(
                 model = appState.selectedHomeId?.imageUrl,
-                placeholder = painterResource(id = R.drawable.logo_sag),
-                error = painterResource(id = R.drawable.scene_empty),
+
+                placeholder = painterResource(
+                    id = R.drawable.logo_sag
+                ),
+
+                error = painterResource(
+                    id = R.drawable.scene_empty
+                ),
+
                 contentDescription = "Floor Plan",
+
                 modifier = Modifier.fillMaxSize(),
+
                 contentScale = ContentScale.Fit
             )
-//  pintu barat x : 738, y : 76
-//  pintu belakang 1 x : 1650, y : 446, rotation : 90, mirror : true
-//  pintu belakang 2 x : 1650, y : 397, rotation : 90
-//  pintu depan 1 x : 313, y : 559, rotation : 270, mirror : true
-//  pintu depan 2 x : 313, y : 608, rotation : 270
-//  pintu timur 1 x : 739, y : 722, rotation : 180, mirror : true
-//  pintu timur 2 x : 788, y : 722, rotation : 180
+
+            // =========================
+            // RUMAH KAMPUNG
+            // =========================
+            //
+            // HANYA muncul jika:
+            // homeId = home_1772593337399
+            //
+
+            if (isRumahKampungHome) {
+
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = 500.dp,
+                            y = 200.dp
+                        )
+                ) {
+
+                    RumahKampung(
+                        onClick = {
+                            showRumahKampungDialog = true
+                        }
+                    )
+                }
+            }
+
+            // =========================
+            // DEVICE
+            // =========================
 
             appState.devices.forEach { device ->
+
                 if (!device.category.isNullOrEmpty()) {
+
                     device.nodes.forEach { node ->
+
                         DraggableNodeIcon(
                             device = device,
                             node = node,
@@ -176,28 +304,67 @@ fun FloorPlanScreen(
                 }
             }
 
-            appState.rooms.filter { it.isMap }.forEach { room ->
-                DraggableRoomLabel(room = room, viewModel = viewModel, isLock = isLocked)
-            }
+            // =========================
+            // ROOM LABEL
+            // =========================
 
-            val containerColor = if (isLocked) sasiColor.red50 else sasiColor.green50
+            appState.rooms
+                .filter { it.isMap }
+                .forEach { room ->
+
+                    DraggableRoomLabel(
+                        room = room,
+                        viewModel = viewModel,
+                        isLock = isLocked
+                    )
+                }
+
+            // =========================
+            // LOCK BUTTON
+            // =========================
+
+            val containerColor =
+                if (isLocked) {
+                    sasiColor.red50
+                } else {
+                    sasiColor.green50
+                }
 
             if (!isLocked || showLockButton) {
+
                 Card(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
+
                     onClick = {
                         isLocked = !isLocked
-                        showLockButton = false // Immediately hide button when locking
+                        showLockButton = false
                     },
-                    colors = CardDefaults.cardColors(containerColor = containerColor)
+
+                    colors = CardDefaults.cardColors(
+                        containerColor = containerColor
+                    )
                 ) {
+
                     Icon(
-                        imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                        imageVector =
+                            if (isLocked) {
+                                Icons.Default.Lock
+                            } else {
+                                Icons.Default.LockOpen
+                            },
+
                         contentDescription = "Toggle Lock",
+
                         modifier = Modifier.padding(8.dp),
-                        tint = if (isLocked) sasiColor.red500 else sasiColor.green500
+
+                        tint =
+                            if (isLocked) {
+                                sasiColor.red500
+                            } else {
+                                sasiColor.green500
+                            }
                     )
                 }
             }
@@ -311,6 +478,549 @@ private fun DraggableNodeIcon(
         }
     }
 }
+
+@Composable
+fun RumahKampung(
+    onClick: () -> Unit
+) {
+    Image(
+        painter = painterResource(id = R.drawable.ac_on),
+        contentDescription = "Rumah Kampung",
+        modifier = Modifier
+            .size(150.dp)
+            .clickable {
+                onClick()
+            },
+        contentScale = ContentScale.Fit
+    )
+}
+
+@Composable
+fun RumahKampungDeviceDialog(
+    devices: List<Device>,
+    categories: List<com.example.sasi_smart_life.data.models.DeviceCategory>,
+    viewModel: MainViewModel,
+    onDismiss: () -> Unit
+) {
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.82f)
+                .clip(
+                    RoundedCornerShape(22.dp)
+                )
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            sasiColor.blue50,
+                            Color.White,
+                            Color.White
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+
+                // =========================================
+                // HEADER
+                // =========================================
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = "Device Rumah Kampung",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = sasiColor.black500
+                        )
+
+                        Text(
+                            text = "${devices.size} device",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = sasiColor.black300
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDismiss
+                    ) {
+
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Tutup",
+                            tint = sasiColor.black500,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(14.dp)
+                )
+
+                // =========================================
+                // DEVICE GRID
+                // =========================================
+
+                if (devices.isEmpty()) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+
+                        Text(
+                            text = "Tidak ada device di Rumah Kampung",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = sasiColor.black300
+                        )
+                    }
+
+                } else {
+
+                    LazyVerticalGrid(
+
+                        columns = GridCells.Fixed(3),
+
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(
+                                min = 180.dp,
+                                max = 540.dp
+                            ),
+
+                        horizontalArrangement =
+                            Arrangement.spacedBy(14.dp),
+
+                        verticalArrangement =
+                            Arrangement.spacedBy(14.dp),
+
+                        userScrollEnabled = true
+
+                    ) {
+
+                        items(
+                            items = devices,
+                            key = { device ->
+                                device.devId
+                            }
+                        ) { device ->
+
+                            RumahKampungDeviceCard(
+                                device = device,
+                                categories = categories,
+                                viewModel = viewModel
+                            )
+                        }
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                // =========================================
+                // FOOTER
+                // =========================================
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+
+                    Button(
+                        onClick = onDismiss,
+
+                        shape = RoundedCornerShape(10.dp),
+
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = sasiColor.purple500
+                        )
+                    ) {
+
+                        Text(
+                            text = "Tutup",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RumahKampungDeviceCard(
+    device: Device,
+    categories: List<com.example.sasi_smart_life.data.models.DeviceCategory>,
+    viewModel: MainViewModel
+) {
+
+    val categoryData = categories.find {
+        it.categoryId == device.category
+    }
+
+    // =========================================
+    // IMAGE ON / OFF
+    // =========================================
+
+    val imageUrl = if (device.status) {
+
+        // DEVICE ON
+        categoryData?.imageUrlOn
+
+    } else {
+
+        // DEVICE OFF
+        categoryData?.imageUrlOff
+    }
+
+    val categoryName =
+        categoryData?.name ?: "Device"
+
+    // =========================================
+    // CARD COLOR
+    // =========================================
+
+    val cardBackground = if (device.status) {
+
+        Brush.verticalGradient(
+            colors = listOf(
+                sasiColor.blue500,
+                Color.White
+            )
+        )
+
+    } else {
+
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White,
+                Color.White
+            )
+        )
+    }
+
+    val borderColor = if (device.status) {
+
+        sasiColor.blue500
+
+    } else {
+
+        sasiColor.black100
+    }
+
+    val primaryTextColor = if (device.status) {
+
+        sasiColor.black500
+
+    } else {
+
+        sasiColor.black500
+    }
+
+    // =========================================
+    // DEVICE CARD
+    // =========================================
+
+    Card(
+
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(190.dp),
+
+        shape = RoundedCornerShape(16.dp),
+
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent
+        ),
+
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        ),
+
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 3.dp
+        )
+    ) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(cardBackground)
+                .padding(10.dp)
+        ) {
+
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+
+                // =========================================
+                // DEVICE IMAGE
+                // =========================================
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+
+                    contentAlignment = Alignment.Center
+                ) {
+
+                    Surface(
+
+                        modifier = Modifier
+                            .size(92.dp),
+
+                        shape = RoundedCornerShape(16.dp),
+
+                        color = Color.White.copy(
+                            alpha = 0.82f
+                        )
+                    ) {
+
+                        AsyncImage(
+
+                            model = imageUrl,
+
+                            placeholder =
+                                painterResource(
+                                    id = R.drawable.logo_sag
+                                ),
+
+                            error =
+                                painterResource(
+                                    id = R.drawable.scene_empty
+                                ),
+
+                            contentDescription =
+                                device.name,
+
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(7.dp),
+
+                            contentScale =
+                                ContentScale.Fit
+                        )
+                    }
+                }
+
+                // =========================================
+                // DEVICE NAME
+                // =========================================
+
+                Text(
+
+                    text = device.name,
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    style =
+                        MaterialTheme.typography.titleSmall,
+
+                    fontWeight =
+                        FontWeight.Bold,
+
+                    maxLines = 1,
+
+                    overflow =
+                        TextOverflow.Ellipsis,
+
+                    color =
+                        primaryTextColor
+                )
+
+                // =========================================
+                // CATEGORY
+                // =========================================
+
+                Text(
+
+                    text = categoryName,
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    style =
+                        MaterialTheme.typography.bodySmall,
+
+                    maxLines = 1,
+
+                    overflow =
+                        TextOverflow.Ellipsis,
+
+                    color =
+                        sasiColor.black300
+                )
+
+                Spacer(
+                    modifier = Modifier.height(5.dp)
+                )
+
+                // =========================================
+                // STATUS + SWITCH
+                // =========================================
+
+                Row(
+
+                    modifier =
+                        Modifier.fillMaxWidth(),
+
+                    horizontalArrangement =
+                        Arrangement.SpaceBetween,
+
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    // =====================================
+                    // ONLINE / OFFLINE
+                    // =====================================
+
+                    Row(
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+
+                        val wifiIcon =
+                            if (device.isOnline) {
+
+                                Icons.Outlined.Wifi
+
+                            } else {
+
+                                Icons.Default.WifiOff
+                            }
+
+                        val wifiColor =
+                            if (device.isOnline) {
+
+                                sasiColor.green500
+
+                            } else {
+
+                                sasiColor.red500
+                            }
+
+                        val wifiText =
+                            if (device.isOnline) {
+
+                                "Online"
+
+                            } else {
+
+                                "Offline"
+                            }
+
+                        Icon(
+
+                            imageVector =
+                                wifiIcon,
+
+                            contentDescription =
+                                wifiText,
+
+                            tint =
+                                wifiColor,
+
+                            modifier =
+                                Modifier.size(15.dp)
+                        )
+
+                        Spacer(
+                            modifier =
+                                Modifier.width(4.dp)
+                        )
+
+                        Text(
+
+                            text =
+                                wifiText,
+
+                            style =
+                                MaterialTheme.typography.bodySmall,
+
+                            color =
+                                wifiColor
+                        )
+                    }
+
+                    // =====================================
+                    // SWITCH
+                    // =====================================
+
+                    if (!device.isTuya) {
+
+                        Switch(
+
+                            checked =
+                                device.status,
+
+                            onCheckedChange = { newStatus ->
+
+                                device.roomId?.let { roomId ->
+
+                                    viewModel.setDeviceStatus(
+                                        device.devId,
+                                        roomId,
+                                        newStatus
+                                    )
+                                }
+                            },
+
+                            modifier =
+                                Modifier.scale(0.75f),
+
+                            colors =
+                                SwitchDefaults.colors(
+
+                                    checkedThumbColor =
+                                        sasiColor.grey50,
+
+                                    uncheckedThumbColor =
+                                        sasiColor.grey50,
+
+                                    checkedTrackColor =
+                                        sasiColor.purple500,
+
+                                    uncheckedTrackColor =
+                                        sasiColor.black50,
+
+                                    uncheckedBorderColor =
+                                        sasiColor.black50
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun ShimmerBox(

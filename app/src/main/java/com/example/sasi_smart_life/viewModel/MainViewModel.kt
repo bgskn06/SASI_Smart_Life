@@ -53,27 +53,28 @@ class MainViewModel(
                     info = "Logged in Firebase as ${user.email}. Connecting to Tuya..."
                 )
                 val uid = user.uid
-                tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
-                    if (success) {
-                        tuyaAuthRepo.getUserHomeId(uid) { homeId ->
-                            if (homeId == 0L) {
-                                tuyaAuthRepo.createHome("My Home") { newHomeId, createError ->
-                                    if (newHomeId != 0L) {
-                                        tuyaAuthRepo.updateTuyaHomeId(uid, newHomeId) {
-                                            loadAllData()
-                                        }
-                                    } else {
-                                        Log.e(tag, "Gagal membuat home: $createError")
-                                    }
-                                }
-                            } else {
-                                loadAllData()
-                            }
-                        }
-                    } else {
-                        Log.e(tag, "Tuya Login Failed: $error")
-                    }
-                }
+                loadAllData()
+//                tuyaAuthRepo.loginOrRegisterTuya(uid) { success, error ->
+//                    if (success) {
+//                        tuyaAuthRepo.getUserHomeId(uid) { homeId ->
+//                            if (homeId == 0L) {
+//                                tuyaAuthRepo.createHome("My Home") { newHomeId, createError ->
+//                                    if (newHomeId != 0L) {
+//                                        tuyaAuthRepo.updateTuyaHomeId(uid, newHomeId) {
+//                                            loadAllData()
+//                                        }
+//                                    } else {
+//                                        Log.e(tag, "Gagal membuat home: $createError")
+//                                    }
+//                                }
+//                            } else {
+//                                loadAllData()
+//                            }
+//                        }
+//                    } else {
+//                        Log.e(tag, "Tuya Login Failed: $error")
+//                    }
+//                }
             }
             else {
                 tuyaAuthRepo.logout()
