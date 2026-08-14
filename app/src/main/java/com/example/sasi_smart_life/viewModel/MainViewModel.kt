@@ -783,4 +783,51 @@ class MainViewModel(
             }
         }
     }
+
+    fun createManagementPassword(
+        password: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val homeId = _uiState.value.selectedHomeId?.homeId
+
+        if (homeId == null) {
+            onResult(false, "Home belum dipilih")
+            return
+        }
+
+        homeRepo.createManagementPassword(
+            homeId = homeId,
+            password = password
+        ) { success, error ->
+
+            if (success) {
+                _uiState.value = _uiState.value.copy(
+                    info = "Management password berhasil dibuat",
+                    error = null
+                )
+            }
+
+            onResult(success, error)
+        }
+    }
+
+    fun verifyManagementPassword(
+        password: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val homeId = _uiState.value.selectedHomeId?.homeId
+
+        if (homeId == null) {
+            onResult(false, "Home belum dipilih")
+            return
+        }
+
+        homeRepo.verifyManagementPassword(
+            homeId = homeId,
+            password = password
+        ) { success, error ->
+
+            onResult(success, error)
+        }
+    }
 }

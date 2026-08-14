@@ -2,6 +2,9 @@ package com.example.sasi_smart_life.data.repository
 
 import android.util.Log
 import com.google.firebase.database.FirebaseDatabase
+import android.util.Base64
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 class FBHomeRepository {
 

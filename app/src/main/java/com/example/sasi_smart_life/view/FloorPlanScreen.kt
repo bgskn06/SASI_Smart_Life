@@ -268,15 +268,20 @@ fun FloorPlanScreen(
 
             if (isRumahKampungHome) {
 
+                val isRumahKampungOn = appState.devices
+                    .filter { it.roomId == rumahKampungRoomId }
+                    .any { it.status }
+
                 Box(
                     modifier = Modifier
                         .offset(
-                            x = 500.dp,
-                            y = 200.dp
+                            x = 720.dp,
+                            y = 320.dp
                         )
                 ) {
-
                     RumahKampung(
+                        size = 240.dp,
+                        isOn = isRumahKampungOn,
                         onClick = {
                             showRumahKampungDialog = true
                         }
@@ -481,20 +486,28 @@ private fun DraggableNodeIcon(
 
 @Composable
 fun RumahKampung(
+    size: Dp = 180.dp,
+    isOn: Boolean,
     onClick: () -> Unit
 ) {
+
+    val imageRes = if (isOn) {
+        R.drawable.rumahkampung_on
+    } else {
+        R.drawable.rumahkampung
+    }
+
     Image(
-        painter = painterResource(id = R.drawable.ac_on),
+        painter = painterResource(id = imageRes),
         contentDescription = "Rumah Kampung",
         modifier = Modifier
-            .size(150.dp)
+            .size(size)
             .clickable {
                 onClick()
             },
         contentScale = ContentScale.Fit
     )
 }
-
 @Composable
 fun RumahKampungDeviceDialog(
     devices: List<Device>,
