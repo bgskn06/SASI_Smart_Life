@@ -11,6 +11,7 @@ import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.thingclips.smart.home.sdk.ThingHomeSdk
 import com.thingclips.smart.home.sdk.bean.HomeBean
 import com.thingclips.smart.home.sdk.callback.IThingHomeResultCallback
@@ -39,6 +40,11 @@ class MainViewModel(
     // -----------------------------------------
     private val _uiState = MutableStateFlow(AppState())
     val uiState = _uiState.asStateFlow()
+
+    private val _gateStatus = MutableStateFlow(GateStatus())
+    val gateStatus = _gateStatus.asStateFlow()
+
+    private var gateSafetyListener: ValueEventListener? = null
 
     val tag = "MainViewModel_SASI"
 
@@ -784,50 +790,66 @@ class MainViewModel(
         }
     }
 
-    fun createManagementPassword(
-        password: String,
-        onResult: (Boolean, String?) -> Unit
+    private fun setGateCommand(
+        roomId: String,
+        devId: String,
+        command: Int
     ) {
-        val homeId = _uiState.value.selectedHomeId?.homeId
+        if (command !in 1..3) return
 
-        if (homeId == null) {
-            onResult(false, "Home belum dipilih")
-            return
-        }
-
-        homeRepo.createManagementPassword(
-            homeId = homeId,
-            password = password
+        deviceRepo.updateGateStatus(
+            roomId = roomId,
+            devId = devId,
+            command = command
         ) { success, error ->
 
-            if (success) {
+            if (!success) {
                 _uiState.value = _uiState.value.copy(
-                    info = "Management password berhasil dibuat",
-                    error = null
+                    error = error ?: "Gagal mengirim perintah Gate"
                 )
             }
-
-            onResult(success, error)
         }
     }
 
-    fun verifyManagementPassword(
-        password: String,
-        onResult: (Boolean, String?) -> Unit
+    fun openGate(roomId: String, devId: String) {
+        setGateCommand(
+            roomId = roomId,
+            devId = devId,
+            command = 1
+        )
+    }
+
+    fun closeGate(roomId: String, devId: String) {
+        setGateCommand(
+            roomId = roomId,
+            devId = devId,
+            command = 2
+        )
+    }
+
+    fun stopGate(roomId: String, devId: String) {
+        setGateCommand(
+            roomId = roomId,
+            devId = devId,
+            command = 3
+        )
+    }
+
+    fun listenToGateStatus(
+        roomId: String,
+        safetyDevId: String,
+        gateDevId: String
     ) {
-        val homeId = _uiState.value.selectedHomeId?.homeId
+        deviceRepo.observeGateStatus(
+            roomId = roomId,
+            safetyDevId = safetyDevId,
+            gateDevId = gateDevId
+        ) { safety, command ->
 
-        if (homeId == null) {
-            onResult(false, "Home belum dipilih")
-            return
-        }
-
-        homeRepo.verifyManagementPassword(
-            homeId = homeId,
-            password = password
-        ) { success, error ->
-
-            onResult(success, error)
+            _gateStatus.value = GateStatus(
+                command = command,
+                safety = safety
+            )
         }
     }
 }

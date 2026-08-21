@@ -64,3 +64,7 @@ data class DoorSensorLog(
     val status: String = "",
 )
 
+data class GateStatus(
+    val command: Int = 0,
+    val safety: Boolean = false
+)

@@ -45,6 +45,7 @@ object sasiColor {
     val red900 = Color(0xFF6A2020)
 
     val blue50 = Color(0xFFE6EFFE)
+
     val blue100 = Color(0xFFB1CDFB)
     val blue200 = Color(0xFF8CB5F9)
     val blue300 = Color(0xFF5794F6)

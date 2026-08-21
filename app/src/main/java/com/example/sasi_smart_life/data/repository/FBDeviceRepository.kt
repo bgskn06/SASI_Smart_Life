@@ -1,5 +1,6 @@
 package com.example.sasi_smart_life.data.repository
 
+import android.R
 import android.util.Log
 import com.example.sasi_smart_life.data.models.Device
 import com.example.sasi_smart_life.data.models.DeviceNode
@@ -115,6 +116,80 @@ class FBDeviceRepository {
         db.updateChildren(updates)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { e -> onComplete(false, e.message) }
+    }
+
+    fun updateGateStatus(
+        roomId: String,
+        devId: String,
+        command: Int,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        if (command !in 0..3) {
+            onComplete(false, "Invalid gate command: $command")
+            return
+        }
+
+        val updates = mapOf(
+            "/status/$roomId/device/$devId" to command
+        )
+
+        db.updateChildren(updates)
+            .addOnSuccessListener {
+                Log.d(
+                    tag,
+                    "Gate status berhasil diubah: $roomId/$devId = $command"
+                )
+                onComplete(true, null)
+            }
+            .addOnFailureListener { e ->
+                Log.e(
+                    tag,
+                    "Gagal mengubah Gate status: ${e.message}",
+                    e
+                )
+                onComplete(false, e.message)
+            }
+    }
+
+    fun observeGateStatus(
+        roomId: String,
+        safetyDevId: String,
+        gateDevId: String,
+        onUpdate: (safety: Boolean, command: Int) -> Unit
+    ) {
+        val roomRef = db
+            .child("status")
+            .child(roomId)
+            .child("device")
+
+        val listener = object : ValueEventListener {
+
+            override fun onDataChange(snapshot: DataSnapshot) {
+
+                val safetyValue =
+                    snapshot.child(safetyDevId)
+                        .getValue(Int::class.java) ?: 0
+
+                val gateValue =
+                    snapshot.child(gateDevId)
+                        .getValue(Int::class.java) ?: 0
+
+                val safety = safetyValue == 1
+
+                val command = gateValue.coerceIn(0, 3)
+
+                onUpdate(safety, command)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(
+                    tag,
+                    "Gagal membaca status Gate: ${error.message}"
+                )
+            }
+        }
+
+        roomRef.addValueEventListener(listener)
     }
 
     fun updateDeviceNodePosition(devId: String, nodeId: String, x: Float, y: Float, onComplete: (Boolean, String?) -> Unit) {

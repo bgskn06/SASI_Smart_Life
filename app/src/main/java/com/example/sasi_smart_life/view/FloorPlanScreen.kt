@@ -88,6 +88,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun FloorPlanScreen(
@@ -100,6 +103,12 @@ fun FloorPlanScreen(
     val isRumahKampungHome =
         appState.selectedHomeId?.homeId == "home_1772593337399"
     val rumahKampungRoomId = "room_Taman_1778902444680"
+    val isGerbangTimurHome =
+        appState.selectedHomeId?.homeId == "home_1787194890059"
+    val isGerbangBaratHome =
+        appState.selectedHomeId?.homeId == "home_1787205151148"
+    val isGerbangUtaraHome =
+        appState.selectedHomeId?.homeId == "home_1787205160017"
 
     var showLocationDialog by remember { mutableStateOf(false) }
     var showAddLocationDialog by remember { mutableStateOf(false) }
@@ -309,6 +318,37 @@ fun FloorPlanScreen(
                 }
             }
 
+            if (isGerbangTimurHome) {
+                GateControl(
+                    viewModel = viewModel,
+                    roomId = "room_G_TIMUR_1787216653556",
+                    gateDevId = "dev_Gerbang_Timur_002",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                )
+            }
+            if (isGerbangBaratHome) {
+
+                GateControl(
+                    viewModel = viewModel,
+                    roomId = "room_G_BARAT_1787206394275",
+                    gateDevId = "dev_Gerbang_Barat_002",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                )
+            }
+
+            if (isGerbangUtaraHome) {
+
+                GateControl(
+                    viewModel = viewModel,
+                    roomId = "room_G_UTARA_1787206402984",
+                    gateDevId = "dev_Gerbang_Utara_002",
+                    modifier = Modifier
+                            .align(Alignment.Center)
+                )
+            }
+
             // =========================
             // ROOM LABEL
             // =========================
@@ -396,6 +436,7 @@ fun getDeviceSize(categoryName: String?): Dp {
         "Lampu Highbay" -> 52.dp
         "Door Sensor Gerbang" -> 118.dp
         "Door Sensor Gerbang 2" -> 144.dp
+        "Safety" -> 100.dp
         else -> 36.dp
     }
 }
@@ -1031,6 +1072,107 @@ private fun RumahKampungDeviceCard(
             }
         }
     }
+}
+
+@Composable
+fun GateControl(
+    viewModel: MainViewModel,
+    roomId: String,
+    gateDevId: String,
+    modifier: Modifier = Modifier
+) {
+
+    Text(
+        text = "STATUS SAFETY",
+        modifier = Modifier.offset(
+            x = 380.dp,
+            y = 100.dp
+        ),
+        fontSize = 32.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.Black
+    )
+
+    Spacer(
+        modifier = Modifier.height(10.dp)
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GateButtonImage(
+            normalImage = R.drawable.tombolopen,
+            pressedImage = R.drawable.tombolopen_pressed,
+            contentDescription = "OPEN",
+            onClick = {
+                viewModel.openGate(
+                    roomId = roomId,
+                    devId = gateDevId
+                )
+            }
+        )
+
+        GateButtonImage(
+            normalImage = R.drawable.tombolstop,
+            pressedImage = R.drawable.tombolstop_pressed,
+            contentDescription = "STOP",
+            onClick = {
+                viewModel.stopGate(
+                    roomId = roomId,
+                    devId = gateDevId
+                )
+            }
+        )
+        GateButtonImage(
+            normalImage = R.drawable.tombolclose,
+            pressedImage = R.drawable.tombolclose_pressed,
+            contentDescription = "CLOSE",
+            onClick = {
+                viewModel.closeGate(
+                    roomId = roomId,
+                    devId = gateDevId
+                )
+            }
+        )
+    }
+}
+
+@Composable
+fun GateButtonImage(
+    normalImage: Int,
+    pressedImage: Int,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember {
+        MutableInteractionSource()
+    }
+
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    Image(
+        painter = painterResource(
+            id = if (isPressed) {
+                pressedImage
+            } else {
+                normalImage
+            }
+        ),
+
+        contentDescription = contentDescription,
+
+        modifier = Modifier
+            .size(200.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+
+        contentScale = ContentScale.Fit
+    )
 }
 
 
