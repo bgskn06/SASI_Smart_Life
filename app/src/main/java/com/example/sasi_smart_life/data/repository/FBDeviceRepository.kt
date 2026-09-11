@@ -21,7 +21,10 @@ class FBDeviceRepository {
     ).reference
 
     private val deviceListenersMap = mutableMapOf<String, ValueEventListener>()
-
+    private var gatePositionListener: ValueEventListener? = null
+    private val gateCommandListeners = mutableMapOf<String, ValueEventListener>()
+    private val gateSafetyListeners = mutableMapOf<String, ValueEventListener>()
+    private val gateLiveStatusListeners = mutableMapOf<String, ValueEventListener>()
     val tag = "DEVICE_SASI"
 
     fun saveDevice(device: Device, onComplete: (Boolean, String?) -> Unit) {
@@ -151,6 +154,44 @@ class FBDeviceRepository {
             }
     }
 
+    fun observeGatePositions(onUpdate: (Map<String, Pair<Float, Float>>) -> Unit) {
+        val ref = db.child("gate")
+
+        // avoid stacking duplicate listeners if this gets called more than once
+        gatePositionListener?.let { ref.removeEventListener(it) }
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val positions = mutableMapOf<String, Pair<Float, Float>>()
+
+                for (child in snapshot.children) {
+                    val gateId = child.key ?: continue
+                    // read as Number first — Firebase may store the value as Long or Double
+                    val x = (child.child("x").value as? Number)?.toFloat()
+                    val y = (child.child("y").value as? Number)?.toFloat()
+
+                    if (x != null && y != null) {
+                        positions[gateId] = Pair(x, y)
+                    }
+                }
+
+                onUpdate(positions)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, "Gagal membaca posisi Gate: ${error.message}")
+            }
+        }
+
+        gatePositionListener = listener
+        ref.addValueEventListener(listener)
+    }
+
+    fun removeGatePositionsListener() {
+        gatePositionListener?.let { db.child("gate").removeEventListener(it) }
+        gatePositionListener = null
+    }
+
     fun observeGateStatus(
         roomId: String,
         safetyDevId: String,
@@ -192,6 +233,60 @@ class FBDeviceRepository {
         roomRef.addValueEventListener(listener)
     }
 
+    fun observeGateCommand(
+        gateKey: String,        // use gate.gateId as the map key
+        roomId: String,
+        devId: String,          // primary devId to represent this gate's state (see note below)
+        onUpdate: (Int) -> Unit
+    ) {
+        val ref = db.child("status").child(roomId).child("device").child(devId)
+
+        gateCommandListeners[gateKey]?.let {
+            db.child("status").child(roomId).child("device").child(devId).removeEventListener(it)
+        }
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val command = (snapshot.value as? Number)?.toInt() ?: 0
+                onUpdate(command)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, "Gagal membaca command Gate: ${error.message}")
+            }
+        }
+
+        gateCommandListeners[gateKey] = listener
+        ref.addValueEventListener(listener)
+    }
+
+    fun observeGateSafety(
+        gateKey: String,
+        roomId: String,
+        safetyDevId: String,
+        onUpdate: (Boolean) -> Unit
+    ) {
+        val ref = db.child("status").child(roomId).child("device").child(safetyDevId)
+
+        gateSafetyListeners[gateKey]?.let { ref.removeEventListener(it) }
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val value = (snapshot.value as? Number)?.toInt() ?: 0
+                onUpdate(value == 1)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, "Gagal membaca status Safety: ${error.message}")
+            }
+        }
+
+        gateSafetyListeners[gateKey] = listener
+        ref.addValueEventListener(listener)
+    }
+
+    fun removeGateSafetyListeners() {
+        gateSafetyListeners.clear()
+    }
+
     fun updateDeviceNodePosition(devId: String, nodeId: String, x: Float, y: Float, onComplete: (Boolean, String?) -> Unit) {
         val positionUpdates = mapOf(
             "x" to x,
@@ -200,6 +295,61 @@ class FBDeviceRepository {
         db.child("device").child(devId).child("nodes").child(nodeId).updateChildren(positionUpdates)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { e -> onComplete(false, e.message) }
+    }
+
+    fun updateGatePosition(
+        gateId: String,
+        x: Float,
+        y: Float,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val updates = mapOf(
+            "x" to x,
+            "y" to y
+        )
+
+        db.child("gate")
+            .child(gateId)
+            .updateChildren(updates)
+            .addOnSuccessListener {
+                Log.d(
+                    tag,
+                    "Posisi Gate berhasil disimpan: $gateId x=$x y=$y"
+                )
+                onComplete(true, null)
+            }
+            .addOnFailureListener { e ->
+                Log.e(
+                    tag,
+                    "Gagal menyimpan posisi Gate: ${e.message}",
+                    e
+                )
+                onComplete(false, e.message)
+            }
+    }
+
+    fun observeGateLiveStatus(gateId: String, onUpdate: (String, Int) -> Unit) {
+        val ref = db.child("gate").child(gateId)
+
+        gateLiveStatusListeners[gateId]?.let { ref.removeEventListener(it) }
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val state = snapshot.child("state").getValue(String::class.java) ?: "UNKNOWN"
+                val progress = (snapshot.child("progress").value as? Number)?.toInt() ?: 0
+                onUpdate(state, progress)
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(tag, "Gagal membaca live status Gate: ${error.message}")
+            }
+        }
+
+        gateLiveStatusListeners[gateId] = listener
+        ref.addValueEventListener(listener)
+    }
+
+    fun removeGateLiveStatusListeners() {
+        gateLiveStatusListeners.clear()
     }
 
     fun getDevicesByHomeListener(homeId: String, onComplete: (List<Map<String, Any>>) -> Unit) {

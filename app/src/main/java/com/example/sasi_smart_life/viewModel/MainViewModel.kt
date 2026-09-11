@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import kotlin.Result.Companion.success
+import com.example.sasi_smart_life.view.allGates
 
 class MainViewModel(
     private val userRepo: FBUserRepository,
@@ -45,6 +46,7 @@ class MainViewModel(
     val gateStatus = _gateStatus.asStateFlow()
 
     private var gateSafetyListener: ValueEventListener? = null
+    val gatePositions: Map<String, Pair<Float, Float>> = emptyMap()
 
     val tag = "MainViewModel_SASI"
 
@@ -92,6 +94,9 @@ class MainViewModel(
     override fun onCleared() {
         super.onCleared()
         deviceRepo.removeDevicesListener()
+        deviceRepo.removeGatePositionsListener()
+        deviceRepo.removeGateSafetyListeners()
+        deviceRepo.removeGateLiveStatusListeners()   // <-- add
         if (sceneEventListener != null) {
             dbRef.removeEventListener(sceneEventListener!!)
         }
@@ -114,8 +119,59 @@ class MainViewModel(
         val uid = auth.currentUser?.uid ?: return
         loadUser(uid)
         loadHomes(uid)
+        loadGatePositions()
+        loadGateCommands()
+        loadGateSafety()
+        loadGateLiveStatus()
     }
 
+    fun loadGateLiveStatus() {
+        allGates.forEach { gate ->
+            deviceRepo.observeGateLiveStatus(gate.gateId) { state, progress ->
+                val updated = _uiState.value.gateLiveStatus.toMutableMap()
+                updated[gate.gateId] = GateLiveStatus(state = state, progress = progress)
+                _uiState.value = _uiState.value.copy(gateLiveStatus = updated)
+            }
+        }
+    }
+
+    fun loadGatePositions() {
+        deviceRepo.observeGatePositions { positions ->
+            _uiState.value = _uiState.value.copy(gatePositions = positions)
+        }
+    }
+
+    fun loadGateCommands() {
+        allGates.forEach { gate ->
+            // Barat has 2 devIds (left/right) — they should always move together,
+            // so the first one is a safe representative for icon state.
+            val representativeDevId = gate.devIds.first()
+
+            deviceRepo.observeGateCommand(
+                gateKey = gate.gateId,
+                roomId = gate.roomId,
+                devId = representativeDevId
+            ) { command ->
+                val updated = _uiState.value.gateCommands.toMutableMap()
+                updated[gate.gateId] = command
+                _uiState.value = _uiState.value.copy(gateCommands = updated)
+            }
+        }
+    }
+
+    fun loadGateSafety() {
+        allGates.forEach { gate ->
+            deviceRepo.observeGateSafety(
+                gateKey = gate.gateId,
+                roomId = gate.roomId,
+                safetyDevId = gate.safetyDevId
+            ) { isActive ->
+                val updated = _uiState.value.gateSafety.toMutableMap()
+                updated[gate.gateId] = isActive
+                _uiState.value = _uiState.value.copy(gateSafety = updated)
+            }
+        }
+    }
 
     // ----------------------------------------------------
     // USER
@@ -460,6 +516,30 @@ class MainViewModel(
         deviceRepo.updateDeviceNodePosition(devId, nodeId, x, y) { success, error ->
             if (!success) {
                 _uiState.value = _uiState.value.copy(error = "Failed to save node position: $error")
+            }
+        }
+    }
+
+    fun updateGatePosition(
+        gateId: String,
+        x: Float,
+        y: Float
+    ) {
+        deviceRepo.updateGatePosition(
+            gateId = gateId,
+            x = x,
+            y = y
+        ) { success, error ->
+
+            if (!success) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Gagal menyimpan posisi Gate: $error"
+                )
+            } else {
+                Log.d(
+                    tag,
+                    "Gate position saved: $gateId x=$x y=$y"
+                )
             }
         }
     }

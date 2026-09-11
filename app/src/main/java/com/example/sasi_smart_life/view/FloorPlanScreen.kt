@@ -66,6 +66,8 @@ import com.example.sasi_smart_life.data.models.Room
 import com.example.sasi_smart_life.view.master.Header
 import com.example.sasi_smart_life.view.theme.sasiColor
 import com.example.sasi_smart_life.viewModel.MainViewModel
+import com.example.sasi_smart_life.data.models.AreaMapInfo
+import com.example.sasi_smart_life.data.models.AreaPopupType
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import androidx.compose.material3.Switch
@@ -91,6 +93,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import com.example.sasi_smart_life.viewModel.GateLiveStatus
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyRow
+import com.example.sasi_smart_life.data.models.DeviceCategory
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 @Composable
 fun FloorPlanScreen(
@@ -99,24 +115,15 @@ fun FloorPlanScreen(
 ) {
     val appState by viewModel.uiState.collectAsState()
 
-    // Hanya Home Rumah Kampung yang mendapatkan icon Rumah Kampung
-    val isRumahKampungHome =
-        appState.selectedHomeId?.homeId == "home_1772593337399"
-    val rumahKampungRoomId = "room_Taman_1778902444680"
-    val isGerbangTimurHome =
-        appState.selectedHomeId?.homeId == "home_1787194890059"
-    val isGerbangBaratHome =
-        appState.selectedHomeId?.homeId == "home_1787205151148"
-    val isGerbangUtaraHome =
-        appState.selectedHomeId?.homeId == "home_1787205160017"
-
+    // ---- state declared BEFORE anything uses it ----
+    var selectedGate by remember { mutableStateOf<GateInfo?>(null) }
     var showLocationDialog by remember { mutableStateOf(false) }
     var showAddLocationDialog by remember { mutableStateOf(false) }
-
-    var showRumahKampungDialog by remember { mutableStateOf(false) }
-
     var isLocked by remember { mutableStateOf(true) }
     var showLockButton by remember { mutableStateOf(false) }
+    var selectedArea by remember { mutableStateOf<AreaMapInfo?>(null) }
+
+    val popupOnlyRoomIds = remember { allAreaMaps.map { it.roomId }.toSet() }
 
     LaunchedEffect(showLockButton, isLocked) {
         if (isLocked && showLockButton) {
@@ -125,50 +132,34 @@ fun FloorPlanScreen(
         }
     }
 
-    // =========================
-    // LOCATION DIALOG
-    // =========================
+    val currentHomeId = appState.selectedHomeId?.homeId
+    val gateForThisHome = allGates.find { it.homeId == currentHomeId }
 
+    // ---- dialogs (location / add-location / rumah kampung) unchanged, keep as-is ----
     if (showLocationDialog) {
         LocationSelectionDialog(
             homes = appState.homes,
             currentHomeId = appState.selectedHomeId?.homeId,
-
-            onDismissRequest = {
-                showLocationDialog = false
-            },
-
+            onDismissRequest = { showLocationDialog = false },
             onLocationSelected = { selectedHome ->
                 viewModel.selectHome(selectedHome)
                 showLocationDialog = false
             },
-
             onAddLocationClick = {
                 showLocationDialog = false
                 showAddLocationDialog = true
             },
-
             onSettingsClick = {
                 showLocationDialog = false
                 onNavigateToSettings(it)
             },
-
-            onLogoutClick = {
-                viewModel.logout()
-            }
+            onLogoutClick = { viewModel.logout() }
         )
     }
 
-    // =========================
-    // ADD LOCATION DIALOG
-    // =========================
-
     if (showAddLocationDialog) {
         AddLocationDialog(
-            onDismissRequest = {
-                showAddLocationDialog = false
-            },
-
+            onDismissRequest = { showAddLocationDialog = false },
             onSave = { name ->
                 viewModel.createHome(name)
                 showAddLocationDialog = false
@@ -176,39 +167,37 @@ fun FloorPlanScreen(
         )
     }
 
-    if (showRumahKampungDialog) {
-        RumahKampungDeviceDialog(
-            devices = appState.devices.filter {
-                it.roomId == rumahKampungRoomId
-            },
-            categories = appState.categories,
+    // ---- gate control dialog, single source of truth ----
+    selectedGate?.let { gate ->
+        val isSafetyActive = appState.gateSafety[gate.gateId] ?: false   // <-- ADD THIS LINE
+
+        GateControlDialog(
             viewModel = viewModel,
-            onDismiss = {
-                showRumahKampungDialog = false
-            }
+            gateName = gate.name,
+            roomId = gate.roomId,
+            devIds = gate.devIds,
+            isSafetyActive = isSafetyActive,
+            onDismiss = { selectedGate = null }
         )
     }
 
-    // =========================
-    // MAIN SCREEN
-    // =========================
+    selectedArea?.let { area ->
+        val areaDevices = appState.devices.filter { it.roomId == area.roomId }
+        when (area.popupType) {
+            AreaPopupType.GRID -> Unit // not used currently — kept for future flexibility
+            AreaPopupType.MAP -> AreaMapDialog(
+                area = area,
+                devices = areaDevices,
+                categories = appState.categories,
+                viewModel = viewModel,
+                onDismiss = { selectedArea = null }
+            )
+        }
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
-        // =========================
-        // HEADER
-        // =========================
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.15f)
-        ) {
-
+        Column(modifier = Modifier.fillMaxWidth().weight(0.15f)) {
             Header(
                 viewModel = viewModel,
                 categories = appState.categories,
@@ -217,97 +206,71 @@ fun FloorPlanScreen(
                 error = appState.error,
                 roomCount = appState.rooms.count { it.isMap },
                 deviceCount = appState.devices.size,
-
-                onRoomNameClick = {
-                    showLocationDialog = true
-                }
+                onRoomNameClick = { showLocationDialog = true }
             )
         }
 
-        Spacer(
-            modifier = Modifier.height(10.dp)
-        )
-
-        // =========================
-        // FLOOR PLAN
-        // =========================
+        Spacer(modifier = Modifier.height(10.dp))
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(0.85f)
                 .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = {
-                            showLockButton = true
-                        }
-                    )
+                    detectTapGestures(onTap = { showLockButton = true })
                 }
         ) {
-
-            // =========================
-            // GAMBAR FLOOR PLAN
-            // =========================
-
             AsyncImage(
                 model = appState.selectedHomeId?.imageUrl,
-
-                placeholder = painterResource(
-                    id = R.drawable.logo_sag
-                ),
-
-                error = painterResource(
-                    id = R.drawable.scene_empty
-                ),
-
+                placeholder = painterResource(id = R.drawable.logo_sag),
+                error = painterResource(id = R.drawable.scene_empty),
                 contentDescription = "Floor Plan",
-
                 modifier = Modifier.fillMaxSize(),
-
                 contentScale = ContentScale.Fit
             )
 
-            // =========================
-            // RUMAH KAMPUNG
-            // =========================
-            //
-            // HANYA muncul jika:
-            // homeId = home_1772593337399
-            //
+            // ---- ONE unified gate icon, works for Barat/Timur/Utara ----
+            gateForThisHome?.let { gate ->
+                val savedPosition = appState.gatePositions[gate.gateId]
+                val gateX = savedPosition?.first ?: 700f
+                val gateY = savedPosition?.second ?: 400f
+                val liveStatus = appState.gateLiveStatus[gate.gateId] ?: GateLiveStatus()
 
-            if (isRumahKampungHome) {
+                DraggableGateIcon(
+                    gateId = gate.gateId,
+                    gateName = gate.name,
+                    iconRes = gate.iconRes,
+                    progress = liveStatus.progress,
+                    state = liveStatus.state,
+                    size = gate.iconSize,
+                    slideDistance = gate.slideDistance,
+                    x = gateX,
+                    y = gateY,
+                    isLock = isLocked,
+                    onPositionChanged = { newX, newY ->
+                        viewModel.updateGatePosition(gateId = gate.gateId, x = newX, y = newY)
+                    },
+                    onClick = { selectedGate = gate }
+                )
+            }
 
-                val isRumahKampungOn = appState.devices
-                    .filter { it.roomId == rumahKampungRoomId }
+            allAreaMaps.filter { it.homeId == currentHomeId }.forEach { area ->
+                val isAreaOn = appState.devices
+                    .filter { it.roomId == area.roomId }
                     .any { it.status }
 
-                Box(
-                    modifier = Modifier
-                        .offset(
-                            x = 720.dp,
-                            y = 320.dp
-                        )
-                ) {
-                    RumahKampung(
-                        size = 240.dp,
-                        isOn = isRumahKampungOn,
-                        onClick = {
-                            showRumahKampungDialog = true
-                        }
+                Box(modifier = Modifier.offset(x = area.buildingOffsetX, y = area.buildingOffsetY)) {
+                    AreaBuildingIcon(
+                        area = area,
+                        isOn = isAreaOn,
+                        onClick = { selectedArea = area }
                     )
                 }
             }
 
-            // =========================
-            // DEVICE
-            // =========================
-
             appState.devices.forEach { device ->
-
-                if (!device.category.isNullOrEmpty()) {
-
+                if (!device.category.isNullOrEmpty() && device.roomId !in popupOnlyRoomIds) {
                     device.nodes.forEach { node ->
-
                         DraggableNodeIcon(
                             device = device,
                             node = node,
@@ -318,98 +281,26 @@ fun FloorPlanScreen(
                 }
             }
 
-            if (isGerbangTimurHome) {
-                GateControl(
-                    viewModel = viewModel,
-                    roomId = "room_G_TIMUR_1787216653556",
-                    gateDevId = "dev_Gerbang_Timur_002",
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                )
-            }
-            if (isGerbangBaratHome) {
-
-                GateControl(
-                    viewModel = viewModel,
-                    roomId = "room_G_BARAT_1787206394275",
-                    gateDevId = "dev_Gerbang_Barat_002",
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                )
+            appState.rooms.filter { it.isMap }.forEach { room ->
+                DraggableRoomLabel(room = room, viewModel = viewModel, isLock = isLocked)
             }
 
-            if (isGerbangUtaraHome) {
-
-                GateControl(
-                    viewModel = viewModel,
-                    roomId = "room_G_UTARA_1787206402984",
-                    gateDevId = "dev_Gerbang_Utara_002",
-                    modifier = Modifier
-                            .align(Alignment.Center)
-                )
-            }
-
-            // =========================
-            // ROOM LABEL
-            // =========================
-
-            appState.rooms
-                .filter { it.isMap }
-                .forEach { room ->
-
-                    DraggableRoomLabel(
-                        room = room,
-                        viewModel = viewModel,
-                        isLock = isLocked
-                    )
-                }
-
-            // =========================
-            // LOCK BUTTON
-            // =========================
-
-            val containerColor =
-                if (isLocked) {
-                    sasiColor.red50
-                } else {
-                    sasiColor.green50
-                }
+            val containerColor = if (isLocked) sasiColor.red50 else sasiColor.green50
 
             if (!isLocked || showLockButton) {
-
                 Card(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                     onClick = {
                         isLocked = !isLocked
                         showLockButton = false
                     },
-
-                    colors = CardDefaults.cardColors(
-                        containerColor = containerColor
-                    )
+                    colors = CardDefaults.cardColors(containerColor = containerColor)
                 ) {
-
                     Icon(
-                        imageVector =
-                            if (isLocked) {
-                                Icons.Default.Lock
-                            } else {
-                                Icons.Default.LockOpen
-                            },
-
+                        imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                         contentDescription = "Toggle Lock",
-
                         modifier = Modifier.padding(8.dp),
-
-                        tint =
-                            if (isLocked) {
-                                sasiColor.red500
-                            } else {
-                                sasiColor.green500
-                            }
+                        tint = if (isLocked) sasiColor.red500 else sasiColor.green500
                     )
                 }
             }
@@ -447,9 +338,18 @@ private fun DraggableNodeIcon(
     node: DeviceNode,
     viewModel: MainViewModel,
     isLock: Boolean,
+    scale: Float = 1f,
+    canvasOffsetX: Float = 0f,
+    canvasOffsetY: Float = 0f,
 ) {
-    var offsetX by remember { mutableStateOf(node.x) }
-    var offsetY by remember { mutableStateOf(node.y) }
+    // Track position in RENDER-space (actual on-screen pixels), not design-space.
+    // Re-derive whenever the node, scale, or canvas offset changes (e.g. popup reopened).
+    var renderX by remember(node.id, scale, canvasOffsetX, canvasOffsetY) {
+        mutableStateOf(canvasOffsetX + node.x * scale)
+    }
+    var renderY by remember(node.id, scale, canvasOffsetX, canvasOffsetY) {
+        mutableStateOf(canvasOffsetY + node.y * scale)
+    }
     var isBeingDragged by remember { mutableStateOf(false) }
 
     val appState by viewModel.uiState.collectAsState()
@@ -460,7 +360,8 @@ private fun DraggableNodeIcon(
         category?.imageUrlOff
     }
 
-    val size = getDeviceSize(category?.name)
+    val rawSize = getDeviceSize(category?.name) * scale
+    val size = if (scale < 1f) rawSize.coerceAtLeast(50.dp) else rawSize
     val scaleX = if (node.mirror) -1f else 1f
 
     val dragModifier = if (!isLock) {
@@ -471,15 +372,18 @@ private fun DraggableNodeIcon(
                 },
                 onDragEnd = {
                     isBeingDragged = false
-                    viewModel.updateDeviceNodePosition(device.devId, node.id, offsetX, offsetY)
+                    // convert render-space back to design-space before saving
+                    val savedX = (renderX - canvasOffsetX) / scale
+                    val savedY = (renderY - canvasOffsetY) / scale
+                    viewModel.updateDeviceNodePosition(device.devId, node.id, savedX, savedY)
                 },
                 onDragCancel = {
                     isBeingDragged = false
                 }
             ) { change, dragAmount ->
                 change.consume()
-                offsetX += dragAmount.x
-                offsetY += dragAmount.y
+                renderX += dragAmount.x
+                renderY += dragAmount.y
             }
         }
     } else {
@@ -489,12 +393,12 @@ private fun DraggableNodeIcon(
     Box(
         modifier = Modifier
             .offset {
-                IntOffset(offsetX.roundToInt(), offsetY.roundToInt())
+                IntOffset(renderX.roundToInt(), renderY.roundToInt())
             }
             .then(dragModifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                 if (device.roomId != null) {
-                    if(!device.isTuya){
+                    if (!device.isTuya) {
                         viewModel.setDeviceStatus(device.devId, device.roomId, !device.status)
                     }
                 }
@@ -525,193 +429,538 @@ private fun DraggableNodeIcon(
     }
 }
 
+val allAreaMaps = listOf(
+    AreaMapInfo(
+        areaId = "area_rumah_kampung",
+        name = "Rumah Kampung",
+        roomId = "room_Taman_1778902444680",
+        homeId = "home_1772593337399",
+        popupType = AreaPopupType.MAP,
+        buildingIconOnRes = R.drawable.rumahkampung_on,
+        buildingIconOffRes = R.drawable.rumahkampung,
+        mapImageRes = R.drawable.maprumahkampung,
+        buildingIconSize = 240.dp,
+        buildingOffsetX = 720.dp,
+        buildingOffsetY = 320.dp
+    )
+)
+
 @Composable
-fun RumahKampung(
-    size: Dp = 180.dp,
+fun AreaBuildingIcon(
+    area: AreaMapInfo,
     isOn: Boolean,
     onClick: () -> Unit
 ) {
-
-    val imageRes = if (isOn) {
-        R.drawable.rumahkampung_on
-    } else {
-        R.drawable.rumahkampung
-    }
-
+    val imageRes = if (isOn) area.buildingIconOnRes else area.buildingIconOffRes
     Image(
         painter = painterResource(id = imageRes),
-        contentDescription = "Rumah Kampung",
+        contentDescription = area.name,
         modifier = Modifier
-            .size(size)
-            .clickable {
-                onClick()
-            },
+            .size(area.buildingIconSize)
+            .clickable { onClick() },
         contentScale = ContentScale.Fit
     )
 }
+
 @Composable
-fun RumahKampungDeviceDialog(
+fun AreaMapDialog(
+    area: AreaMapInfo,
     devices: List<Device>,
-    categories: List<com.example.sasi_smart_life.data.models.DeviceCategory>,
+    categories: List<DeviceCategory>,
     viewModel: MainViewModel,
     onDismiss: () -> Unit
 ) {
+    var isLocked by remember { mutableStateOf(true) }
+    var showLockButton by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showLockButton, isLocked) {
+        if (isLocked && showLockButton) {
+            delay(3000)
+            showLockButton = false
+        }
+    }
+
+    val designWidth = 1920f
+    val designHeight = 1200f
+
+    val areaCategoryIds = remember(devices) {
+        devices.flatMap { d -> d.nodes.map { it.categoryId } }.toSet()
+    }
+    val areaCategories = categories.filter { it.categoryId in areaCategoryIds }
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.82f)
-                .clip(
-                    RoundedCornerShape(22.dp)
-                )
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            sasiColor.blue50,
-                            Color.White,
-                            Color.White
-                        )
-                    )
-                )
-                .padding(20.dp)
+                .fillMaxWidth(0.55f)
+                .fillMaxHeight(0.85f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color.White)
         ) {
+            Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
 
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                // =========================================
-                // HEADER
-                // =========================================
-
+                // ---- HEADER ROW: title card + total device card + category outline box ----
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-
-                    Column(
-                        modifier = Modifier.weight(1f)
+                    // Title card
+                    Card(
+                        modifier = Modifier
+                            .weight(0.3f)
+                            .fillMaxHeight(),
+                        colors = CardDefaults.cardColors(containerColor = sasiColor.purple50),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        border = BorderStroke(1.5.dp, sasiColor.purple300),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-
-                        Text(
-                            text = "Device Rumah Kampung",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = sasiColor.black500
-                        )
-
-                        Text(
-                            text = "${devices.size} device",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = sasiColor.black300
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = area.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_sag),
+                            contentDescription = "Room Image"
                         )
                     }
 
-                    IconButton(
-                        onClick = onDismiss
+                    // Total Device card
+                    Card(
+                        modifier = Modifier
+                            .weight(0.2f)
+                            .fillMaxHeight(),
+                        colors = CardDefaults.cardColors(containerColor = sasiColor.grey50),
+                        border = BorderStroke(1.5.dp, sasiColor.blue500),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 10.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(text = "Total Device", color = sasiColor.black300, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            Text(
+                                text = "${devices.size}",
+                                color = sasiColor.blue500,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
 
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
-                            tint = sasiColor.black500,
-                            modifier = Modifier.size(28.dp)
-                        )
+                    // ---- Separate outlined box for category cards (scrollable) ----
+                    Card(
+                        modifier = Modifier
+                            .weight(0.5f)
+                            .fillMaxHeight(),
+                        colors = CardDefaults.cardColors(containerColor = sasiColor.blue50),
+                        border = BorderStroke(1.dp, sasiColor.blue300),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(5.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(areaCategories) { category ->
+                                AreaCategoryCard(category = category, devices = devices)
+                            }
+                        }
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier.height(14.dp)
-                )
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // =========================================
-                // DEVICE GRID
-                // =========================================
+                // ---- MAP ----
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .aspectRatio(designWidth / designHeight)
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { showLockButton = true })
+                        }
+                ) {
+                    val boxWidthPx = constraints.maxWidth.toFloat()
+                    val boxHeightPx = constraints.maxHeight.toFloat()
 
-                if (devices.isEmpty()) {
+                    val scale = minOf(boxWidthPx / designWidth, boxHeightPx / designHeight)
+                    val renderedImgWidth = designWidth * scale
+                    val renderedImgHeight = designHeight * scale
+                    val offsetXPx = (boxWidthPx - renderedImgWidth) / 2f
+                    val offsetYPx = (boxHeightPx - renderedImgHeight) / 2f
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Image(
+                        painter = painterResource(id = area.mapImageRes ?: R.drawable.scene_empty),
+                        contentDescription = area.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
 
-                        Text(
-                            text = "Tidak ada device di Rumah Kampung",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = sasiColor.black300
-                        )
+                    devices.forEach { device ->
+                        if (!device.category.isNullOrEmpty()) {
+                            device.nodes.forEach { node ->
+                                DraggableNodeIcon(
+                                    device = device,
+                                    node = node,
+                                    viewModel = viewModel,
+                                    isLock = isLocked,
+                                    scale = scale,
+                                    canvasOffsetX = offsetXPx,
+                                    canvasOffsetY = offsetYPx
+                                )
+                            }
+                        }
                     }
 
-                } else {
-
-                    LazyVerticalGrid(
-
-                        columns = GridCells.Fixed(3),
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(
-                                min = 180.dp,
-                                max = 540.dp
-                            ),
-
-                        horizontalArrangement =
-                            Arrangement.spacedBy(14.dp),
-
-                        verticalArrangement =
-                            Arrangement.spacedBy(14.dp),
-
-                        userScrollEnabled = true
-
-                    ) {
-
-                        items(
-                            items = devices,
-                            key = { device ->
-                                device.devId
-                            }
-                        ) { device ->
-
-                            RumahKampungDeviceCard(
-                                device = device,
-                                categories = categories,
-                                viewModel = viewModel
+                    val containerColor = if (isLocked) sasiColor.red50 else sasiColor.green50
+                    if (!isLocked || showLockButton) {
+                        Card(
+                            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                            onClick = {
+                                isLocked = !isLocked
+                                showLockButton = false
+                            },
+                            colors = CardDefaults.cardColors(containerColor = containerColor)
+                        ) {
+                            Icon(
+                                imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = "Toggle Lock",
+                                modifier = Modifier.padding(8.dp),
+                                tint = if (isLocked) sasiColor.red500 else sasiColor.green500
                             )
                         }
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier.height(16.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ---- "Tutup" close button under the map ----
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = sasiColor.blue500
+                        )
+                    ) {
+                        Text(
+                            text = "Tutup",
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AreaCategoryCard(
+    category: DeviceCategory,
+    devices: List<Device>,
+) {
+    val totalCount = devices.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
+    val activeCount = devices.filter { it.status }.sumOf { device ->
+        device.nodes.count { node -> node.categoryId == category.categoryId }
+    }
+    val inactiveCount = totalCount - activeCount
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, sasiColor.blue100),
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(100.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(5.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            AsyncImage(
+                model = category.image.ifEmpty { category.imageUrlOn },
+                placeholder = null,
+                error = painterResource(id = R.drawable.scene_empty),
+                contentDescription = category.name,
+                modifier = Modifier.size(28.dp)
+            )
+            Text(
+                text = category.name,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "$totalCount",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Box(modifier = Modifier.size(4.dp).background(Color.Green, CircleShape))
+                    Text(text = "$activeCount", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = sasiColor.black300)
+                    Box(modifier = Modifier.size(4.dp).background(Color.Gray, CircleShape))
+                    Text(text = "$inactiveCount", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = sasiColor.black300)
+                }
+            }
+        }
+    }
+}
+
+data class GateInfo(
+    val gateId: String,
+    val name: String,
+    val roomId: String,
+    val devIds: List<String>,
+    val safetyDevId: String,
+    val homeId: String,
+    val iconRes: Int,              // <-- replaces openIconRes/closeIconRes
+    val iconSize: Dp = 220.dp,
+    val slideDistance: Dp = 40.dp  // <-- how far it visually slides from closed to open
+)
+
+val allGates = listOf(
+    GateInfo(
+        gateId = "gerbang_barat",
+        name = "Gerbang Barat",
+        roomId = "room_Gedung_A_1787305379335",
+        devIds = listOf("dev_Gerbang_Barat_002", "dev_Gerbang_Barat_003"),
+        safetyDevId = "dev_Gerbang_Barat_001",
+        homeId = "home_1773196739073",
+        iconRes = R.drawable.gerbangbarat_close,   // pick whichever single image represents the gate structure
+        iconSize = 220.dp,
+        slideDistance = 40.dp
+    ),
+    GateInfo(
+        gateId = "gerbang_timur",
+        name = "Gerbang Timur",
+        roomId = "room_Office_1787886573803",
+        devIds = listOf("dev_Gerbang_Timur_002"),
+        safetyDevId = "dev_Gerbang_Timur_001",
+        homeId = "home_1772589167730",
+        iconRes = R.drawable.gerbangtimur_close,
+        iconSize = 170.dp,
+        slideDistance = 30.dp
+    ),
+    GateInfo(
+        gateId = "gerbang_utara",
+        name = "Gerbang Utara",
+        roomId = "room_Gedung_B_1788139696516",
+        devIds = listOf("dev_Gerbang_Utara_002"),
+        safetyDevId = "dev_Gerbang_Utara_001",
+        homeId = "home_1773196769406",
+        iconRes = R.drawable.gerbangutara_close,
+        iconSize = 220.dp,
+        slideDistance = 40.dp
+    )
+)
+
+@Composable
+fun DraggableGateIcon(
+    gateId: String,
+    gateName: String,
+    iconRes: Int,
+    progress: Int,
+    state: String,
+    size: Dp,
+    slideDistance: Dp,
+    x: Float,
+    y: Float,
+    isLock: Boolean,
+    onPositionChanged: (Float, Float) -> Unit,
+    onClick: () -> Unit
+) {
+    var offsetX by remember(gateId) { mutableStateOf(x) }
+    var offsetY by remember(gateId) { mutableStateOf(y) }
+    var isBeingDragged by remember { mutableStateOf(false) }
+
+    LaunchedEffect(x, y) {
+        if (!isBeingDragged) {
+            offsetX = x
+            offsetY = y
+        }
+    }
+
+    val dragModifier = if (!isLock) {
+        Modifier.pointerInput(gateId) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { isBeingDragged = true },
+                onDragEnd = {
+                    isBeingDragged = false
+                    onPositionChanged(offsetX, offsetY)
+                },
+                onDragCancel = { isBeingDragged = false }
+            ) { change, dragAmount ->
+                change.consume()
+                offsetX += dragAmount.x
+                offsetY += dragAmount.y
+            }
+        }
+    } else {
+        Modifier
+    }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress / 100f,
+        animationSpec = tween(300),
+        label = "gateProgress"
+    )
+
+    // slides upward as it opens: 0% progress = no offset (closed),
+    // 100% progress = slideDistance upward (fully open)
+    val slideY = -slideDistance * animatedProgress
+
+    Column(
+        modifier = Modifier
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            .then(dragModifier),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(enabled = isLock, onClick = onClick)
+                .padding(2.dp)
+        ) {
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = gateName,
+                modifier = Modifier
+                    .size(size)
+                    .offset(y = slideY),
+                contentScale = ContentScale.Fit
+            )
+        }
+
+        if (isBeingDragged) {
+            Text(
+                text = gateName,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                fontSize = 12.sp,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+fun GateControl(
+    viewModel: MainViewModel,
+    roomId: String,
+    devIds: List<String>,          // <-- was gateDevId: String
+    modifier: Modifier = Modifier
+) {
+    Spacer(modifier = Modifier.height(10.dp))
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GateButtonImage(
+            normalImage = R.drawable.tombolopen,
+            pressedImage = R.drawable.tombolopen_pressed,
+            contentDescription = "OPEN",
+            onClick = { devIds.forEach { viewModel.openGate(roomId = roomId, devId = it) } }
+        )
+        GateButtonImage(
+            normalImage = R.drawable.tombolstop,
+            pressedImage = R.drawable.tombolstop_pressed,
+            contentDescription = "STOP",
+            onClick = { devIds.forEach { viewModel.stopGate(roomId = roomId, devId = it) } }
+        )
+        GateButtonImage(
+            normalImage = R.drawable.tombolclose,
+            pressedImage = R.drawable.tombolclose_pressed,
+            contentDescription = "CLOSE",
+            onClick = { devIds.forEach { viewModel.closeGate(roomId = roomId, devId = it) } }
+        )
+    }
+}
+
+@Composable
+fun GateControlDialog(
+    viewModel: MainViewModel,
+    gateName: String,
+    roomId: String,
+    devIds: List<String>,
+    isSafetyActive: Boolean,      // <-- add this
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.75f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(Color.White)
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = gateName, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = sasiColor.black500)
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = if (isSafetyActive) "SAFETY AKTIF" else "SAFETY NORMAL",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSafetyActive) sasiColor.red500 else sasiColor.green500
                 )
 
-                // =========================================
-                // FOOTER
-                // =========================================
+                Spacer(modifier = Modifier.height(20.dp))
+
+                GateControl(
+                    viewModel = viewModel,
+                    roomId = roomId,
+                    devIds = devIds
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-
                     Button(
                         onClick = onDismiss,
-
                         shape = RoundedCornerShape(10.dp),
-
                         colors = ButtonDefaults.buttonColors(
                             containerColor = sasiColor.purple500
                         )
                     ) {
-
                         Text(
                             text = "Tutup",
                             fontWeight = FontWeight.SemiBold
@@ -723,421 +972,6 @@ fun RumahKampungDeviceDialog(
     }
 }
 
-@Composable
-private fun RumahKampungDeviceCard(
-    device: Device,
-    categories: List<com.example.sasi_smart_life.data.models.DeviceCategory>,
-    viewModel: MainViewModel
-) {
-
-    val categoryData = categories.find {
-        it.categoryId == device.category
-    }
-
-    // =========================================
-    // IMAGE ON / OFF
-    // =========================================
-
-    val imageUrl = if (device.status) {
-
-        // DEVICE ON
-        categoryData?.imageUrlOn
-
-    } else {
-
-        // DEVICE OFF
-        categoryData?.imageUrlOff
-    }
-
-    val categoryName =
-        categoryData?.name ?: "Device"
-
-    // =========================================
-    // CARD COLOR
-    // =========================================
-
-    val cardBackground = if (device.status) {
-
-        Brush.verticalGradient(
-            colors = listOf(
-                sasiColor.blue500,
-                Color.White
-            )
-        )
-
-    } else {
-
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White,
-                Color.White
-            )
-        )
-    }
-
-    val borderColor = if (device.status) {
-
-        sasiColor.blue500
-
-    } else {
-
-        sasiColor.black100
-    }
-
-    val primaryTextColor = if (device.status) {
-
-        sasiColor.black500
-
-    } else {
-
-        sasiColor.black500
-    }
-
-    // =========================================
-    // DEVICE CARD
-    // =========================================
-
-    Card(
-
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(190.dp),
-
-        shape = RoundedCornerShape(16.dp),
-
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        ),
-
-        border = BorderStroke(
-            width = 1.dp,
-            color = borderColor
-        ),
-
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 3.dp
-        )
-    ) {
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(cardBackground)
-                .padding(10.dp)
-        ) {
-
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-
-                // =========================================
-                // DEVICE IMAGE
-                // =========================================
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Surface(
-                        modifier = Modifier
-                            .size(82.dp),
-
-                        shape = RoundedCornerShape(14.dp),
-
-                        color = Color.LightGray.copy(
-                            alpha = 0.75f
-                        )
-                    ) {
-
-                        AsyncImage(
-
-                            model = imageUrl,
-
-                            placeholder =
-                                painterResource(
-                                    id = R.drawable.logo_sag
-                                ),
-
-                            error =
-                                painterResource(
-                                    id = R.drawable.scene_empty
-                                ),
-
-                            contentDescription =
-                                device.name,
-
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(7.dp),
-
-                            contentScale =
-                                ContentScale.Fit
-                        )
-                    }
-                }
-
-                // =========================================
-                // DEVICE NAME
-                // =========================================
-
-                Text(
-
-                    text = device.name,
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    style =
-                        MaterialTheme.typography.titleSmall,
-
-                    fontWeight =
-                        FontWeight.Bold,
-
-                    maxLines = 1,
-
-                    overflow =
-                        TextOverflow.Ellipsis,
-
-                    color =
-                        primaryTextColor
-                )
-
-                // =========================================
-                // CATEGORY
-                // =========================================
-
-                Text(
-
-                    text = categoryName,
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    style =
-                        MaterialTheme.typography.bodySmall,
-
-                    maxLines = 1,
-
-                    overflow =
-                        TextOverflow.Ellipsis,
-
-                    color =
-                        sasiColor.black300
-                )
-
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
-
-                // =========================================
-                // STATUS + SWITCH
-                // =========================================
-
-                Row(
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween,
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    // =====================================
-                    // ONLINE / OFFLINE
-                    // =====================================
-
-                    Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        val wifiIcon =
-                            if (device.isOnline) {
-
-                                Icons.Outlined.Wifi
-
-                            } else {
-
-                                Icons.Default.WifiOff
-                            }
-
-                        val wifiColor =
-                            if (device.isOnline) {
-
-                                sasiColor.green500
-
-                            } else {
-
-                                sasiColor.red500
-                            }
-
-                        val wifiText =
-                            if (device.isOnline) {
-
-                                "Online"
-
-                            } else {
-
-                                "Offline"
-                            }
-
-                        Icon(
-
-                            imageVector =
-                                wifiIcon,
-
-                            contentDescription =
-                                wifiText,
-
-                            tint =
-                                wifiColor,
-
-                            modifier =
-                                Modifier.size(15.dp)
-                        )
-
-                        Spacer(
-                            modifier =
-                                Modifier.width(4.dp)
-                        )
-
-                        Text(
-
-                            text =
-                                wifiText,
-
-                            style =
-                                MaterialTheme.typography.bodySmall,
-
-                            color =
-                                wifiColor
-                        )
-                    }
-
-                    // =====================================
-                    // SWITCH
-                    // =====================================
-
-                    if (!device.isTuya) {
-
-                        Switch(
-
-                            checked =
-                                device.status,
-
-                            onCheckedChange = { newStatus ->
-
-                                device.roomId?.let { roomId ->
-
-                                    viewModel.setDeviceStatus(
-                                        device.devId,
-                                        roomId,
-                                        newStatus
-                                    )
-                                }
-                            },
-
-                            modifier =
-                                Modifier.scale(0.75f),
-
-                            colors =
-                                SwitchDefaults.colors(
-
-                                    checkedThumbColor =
-                                        sasiColor.grey50,
-
-                                    uncheckedThumbColor =
-                                        sasiColor.grey50,
-
-                                    checkedTrackColor =
-                                        sasiColor.purple500,
-
-                                    uncheckedTrackColor =
-                                        sasiColor.black50,
-
-                                    uncheckedBorderColor =
-                                        sasiColor.black50
-                                )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun GateControl(
-    viewModel: MainViewModel,
-    roomId: String,
-    gateDevId: String,
-    modifier: Modifier = Modifier
-) {
-
-    Text(
-        text = "STATUS SAFETY",
-        modifier = Modifier.offset(
-            x = 380.dp,
-            y = 100.dp
-        ),
-        fontSize = 32.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.Black
-    )
-
-    Spacer(
-        modifier = Modifier.height(10.dp)
-    )
-
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        GateButtonImage(
-            normalImage = R.drawable.tombolopen,
-            pressedImage = R.drawable.tombolopen_pressed,
-            contentDescription = "OPEN",
-            onClick = {
-                viewModel.openGate(
-                    roomId = roomId,
-                    devId = gateDevId
-                )
-            }
-        )
-
-        GateButtonImage(
-            normalImage = R.drawable.tombolstop,
-            pressedImage = R.drawable.tombolstop_pressed,
-            contentDescription = "STOP",
-            onClick = {
-                viewModel.stopGate(
-                    roomId = roomId,
-                    devId = gateDevId
-                )
-            }
-        )
-        GateButtonImage(
-            normalImage = R.drawable.tombolclose,
-            pressedImage = R.drawable.tombolclose_pressed,
-            contentDescription = "CLOSE",
-            onClick = {
-                viewModel.closeGate(
-                    roomId = roomId,
-                    devId = gateDevId
-                )
-            }
-        )
-    }
-}
 
 @Composable
 fun GateButtonImage(

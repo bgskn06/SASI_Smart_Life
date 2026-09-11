@@ -13,6 +13,15 @@ data class DeviceNode(
     val mirror: Boolean = false
 )
 
+data class GateNode(
+    val gateId: String = "",
+    val name: String = "",
+    val roomId: String = "",
+    val devId: String = "",
+    val x: Float = 0f,
+    val y: Float = 0f
+)
+
 /**
  * Represents a smart device in our own system (stored in Firebase).
  */
